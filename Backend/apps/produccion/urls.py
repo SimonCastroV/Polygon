@@ -18,4 +18,19 @@ urlpatterns = [
         views.OrdenProduccionIngresarView.as_view(),
         name='ordenes-ingresar',
     ),
+    path(
+        'ordenes/<int:pk>/enviar-picky/',
+        views.OrdenProduccionEnviarPickyView.as_view(),
+        name='ordenes-enviar-picky',
+    ),
+    path(
+        'ordenes/<int:pk>/recepcion-picky/',
+        views.OrdenProduccionRecepcionPickyView.as_view(),
+        name='ordenes-recepcion-picky',
+    ),
+    path(
+        'ordenes/<int:pk>/enviar-pesaje/',
+        views.OrdenProduccionEnviarPesajeView.as_view(),
+        name='ordenes-enviar-pesaje',
+    ),
 ]

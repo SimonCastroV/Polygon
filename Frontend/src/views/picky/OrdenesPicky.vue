@@ -1,63 +1,39 @@
 <script setup>
+// Pantalla principal de Picky: las OP que Producción ya liberó, incluidas
+// las que Picky ya pasó a Pesaje (ver ordenes_visibles_para en el backend).
 import { computed, onMounted, ref } from 'vue'
 import api from '../../services/api'
-import { useAuthStore } from '../../store/auth'
 import Badge from '../../components/ui/Badge.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
-import {
-  CLASIFICACION_BADGE,
-  ESTADOS_CERRADOS,
-  ESTADO_BADGE,
-  formatearFechaHora,
-} from '../../utils/ordenes'
-
-const auth = useAuthStore()
-// Producción "ingresa" a la OP para diligenciar clasificación/observaciones
-// y es la única que puede liberarla a Picky (ver EsProduccion en el backend);
-// Admin/Supervisor solo consultan.
-const esProduccion = computed(() => auth.rol === 'produccion')
-const textoBoton = computed(() => (esProduccion.value ? 'Ingresar a OP' : 'Ver detalle'))
+import { CLASIFICACION_BADGE, ESTADO_BADGE, formatearFechaHora } from '../../utils/ordenes'
 
 const FILTROS = [
-  { value: 'pendientes', label: 'Pendientes por enviar' },
+  { value: 'pendientes', label: 'Pendientes' },
   { value: 'proceso', label: 'En proceso' },
-  { value: 'todas', label: 'Todas' },
+  { value: 'liberadas', label: 'Ya liberado' },
 ]
 
-// Producción entra a su cola de trabajo; Supervisor/Admin al panorama completo.
-const filtro = ref(auth.rol === 'produccion' ? 'pendientes' : 'todas')
+const filtro = ref('pendientes')
 
 const ordenes = ref([])
 const cargando = ref(true)
 const enviandoId = ref(null)
 const errorEnvio = ref('')
 
-const ordenesActivas = computed(() =>
-  ordenes.value.filter((orden) => !ESTADOS_CERRADOS.includes(orden.estado)),
-)
-
-const ordenesFiltradas = computed(() => {
-  if (filtro.value === 'pendientes') {
-    return ordenesActivas.value.filter((orden) => orden.estado === 'produccion')
-  }
-  if (filtro.value === 'proceso') {
-    return ordenesActivas.value.filter((orden) => orden.estado !== 'produccion')
-  }
-  return ordenesActivas.value
-})
-
-function contar(valorFiltro) {
-  if (valorFiltro === 'pendientes') {
-    return ordenesActivas.value.filter((orden) => orden.estado === 'produccion').length
-  }
-  if (valorFiltro === 'proceso') {
-    return ordenesActivas.value.filter((orden) => orden.estado !== 'produccion').length
-  }
-  return ordenesActivas.value.length
+// Pendiente = llegó de Producción pero Picky aún no confirma la recepción.
+// En proceso = recepción confirmada y sigue En Picky.
+// Ya liberado = Picky ya la envió a Pesaje.
+function grupoDe(orden) {
+  if (orden.estado !== 'picky') return 'liberadas'
+  return orden.fecha_recepcion_picky ? 'proceso' : 'pendientes'
 }
 
-function puedeEnviarAPicky(orden) {
-  return esProduccion.value && orden.estado === 'produccion'
+const ordenesFiltradas = computed(() =>
+  ordenes.value.filter((orden) => grupoDe(orden) === filtro.value),
+)
+
+function contar(valorFiltro) {
+  return ordenes.value.filter((orden) => grupoDe(orden) === valorFiltro).length
 }
 
 async function cargarOrdenes() {
@@ -67,17 +43,15 @@ async function cargarOrdenes() {
   cargando.value = false
 }
 
-async function mandarAPicky(orden) {
+async function enviarAPesaje(orden) {
   errorEnvio.value = ''
   enviandoId.value = orden.id
   try {
-    await api.patch(`/produccion/ordenes/${orden.id}/enviar-picky/`)
+    await api.patch(`/produccion/ordenes/${orden.id}/enviar-pesaje/`)
     await cargarOrdenes()
   } catch (e) {
     const detalle = e.response?.data?.non_field_errors
-    errorEnvio.value = Array.isArray(detalle)
-      ? detalle[0]
-      : 'No se pudo mandar la orden a Picky.'
+    errorEnvio.value = Array.isArray(detalle) ? detalle[0] : 'No se pudo enviar la orden a Pesaje.'
   } finally {
     enviandoId.value = null
   }
@@ -89,8 +63,8 @@ onMounted(cargarOrdenes)
 <template>
   <main class="px-4 py-6 sm:px-6 sm:py-8">
     <div class="mb-4">
-      <h1 class="text-xl font-bold text-ink-900 sm:text-2xl">Órdenes de Producción</h1>
-      <p class="mt-1 text-sm text-ink-500">Órdenes en curso (sin finalizar ni cancelar).</p>
+      <h1 class="text-xl font-bold text-ink-900 sm:text-2xl">Picky</h1>
+      <p class="mt-1 text-sm text-ink-500">Órdenes de Producción recibidas de Producción.</p>
     </div>
 
     <div class="mb-6 flex gap-2 overflow-x-auto pb-1">
@@ -130,46 +104,51 @@ onMounted(cargarOrdenes)
 
         <dl class="space-y-1 text-sm">
           <div class="flex justify-between gap-3">
-            <dt class="text-ink-500">Código</dt>
-            <dd class="text-right font-medium text-ink-900">{{ orden.codigo_producto }}</dd>
-          </div>
-          <div class="flex justify-between gap-3">
-            <dt class="text-ink-500">Cliente</dt>
-            <dd class="text-right font-medium text-ink-900">{{ orden.cliente || '—' }}</dd>
-          </div>
-          <div class="flex justify-between gap-3">
             <dt class="text-ink-500">Producto</dt>
             <dd class="text-right font-medium text-ink-900">{{ orden.referencia }}</dd>
           </div>
-          <div v-if="orden.fecha_envio_picky" class="flex justify-between gap-3">
-            <dt class="text-ink-500">Enviada a Picky</dt>
+          <div class="flex justify-between gap-3">
+            <dt class="text-ink-500">Cantidad</dt>
+            <dd class="text-right font-medium text-ink-900">
+              {{ orden.cantidad }} {{ orden.unidad }}
+            </dd>
+          </div>
+          <div class="flex justify-between gap-3">
+            <dt class="text-ink-500">Recibida el</dt>
             <dd class="text-right font-medium text-ink-900">
               {{ formatearFechaHora(orden.fecha_envio_picky) }}
             </dd>
           </div>
+          <div v-if="orden.fecha_envio_pesaje" class="flex justify-between gap-3">
+            <dt class="text-ink-500">Enviada a Pesaje</dt>
+            <dd class="text-right font-medium text-ink-900">
+              {{ formatearFechaHora(orden.fecha_envio_pesaje) }}
+            </dd>
+          </div>
         </dl>
 
-        <div>
+        <div class="flex flex-wrap gap-2">
           <Badge :color="CLASIFICACION_BADGE[orden.clasificacion]">
             {{ orden.clasificacion_display }}
           </Badge>
+          <Badge v-if="!orden.fecha_recepcion_picky" color="gray">Pendiente de recibir</Badge>
         </div>
 
         <div class="mt-auto flex flex-col gap-2 pt-1">
           <BaseButton
-            v-if="puedeEnviarAPicky(orden)"
+            v-if="grupoDe(orden) === 'proceso'"
             variant="primary"
             class="w-full"
             :loading="enviandoId === orden.id"
-            @click="mandarAPicky(orden)"
+            @click="enviarAPesaje(orden)"
           >
-            Mandar orden a Picky
+            Enviar a Pesaje
           </BaseButton>
           <router-link
-            :to="{ name: 'admin-orden-detalle', params: { id: orden.id } }"
+            :to="{ name: 'picky-orden-detalle', params: { id: orden.id } }"
             class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-ink-900 shadow-sm transition-colors hover:bg-surface-alt focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy-900"
           >
-            {{ textoBoton }}
+            Visualizar
           </router-link>
         </div>
       </div>

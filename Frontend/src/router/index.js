@@ -16,12 +16,14 @@ const routes = [
   {
     path: '/admin',
     component: () => import('../layouts/AdminLayout.vue'),
-    // 'produccion' = estación de Producción (primer eslabón del flujo,
-    // antes de Picky). Solo puede consultar/diligenciar OP, no gestionar
-    // usuarios. No incluye 'planta' (Personal de Planta genérico, ej.
-    // Pesaje), que no debe ver esta pantalla (ver también PuedeVerOP en el
-    // backend).
-    meta: { requiresAuth: true, rolesPermitidos: ['admin', 'supervisor', 'produccion'] },
+    // Cada estación entra con su propio rol: 'produccion' consulta y libera
+    // las OP, 'picky' solo ve las que Producción ya liberó (ver PuedeVerOP
+    // y ordenes_visibles_para en el backend). Las demás estaciones (Pesaje,
+    // Mezcla, etc.) se irán sumando cuando se construya cada base.
+    meta: {
+      requiresAuth: true,
+      rolesPermitidos: ['admin', 'supervisor', 'produccion', 'picky'],
+    },
     children: [
       {
         path: '',
@@ -48,6 +50,18 @@ const routes = [
         component: () => import('../views/produccion/OrdenProduccionDetalle.vue'),
         meta: { rolesPermitidos: ['admin', 'supervisor', 'produccion'] },
       },
+      {
+        path: 'picky/ordenes',
+        name: 'picky-ordenes',
+        component: () => import('../views/picky/OrdenesPicky.vue'),
+        meta: { rolesPermitidos: ['picky'] },
+      },
+      {
+        path: 'picky/ordenes/:id',
+        name: 'picky-orden-detalle',
+        component: () => import('../views/picky/OrdenPickyDetalle.vue'),
+        meta: { rolesPermitidos: ['picky'] },
+      },
     ],
   },
   {
@@ -68,6 +82,7 @@ const router = createRouter({
 export function destinoSegunRol(rol) {
   if (rol === 'admin') return { name: 'admin-usuarios' }
   if (rol === 'supervisor' || rol === 'produccion') return { name: 'admin-ordenes-produccion' }
+  if (rol === 'picky') return { name: 'picky-ordenes' }
   return { name: 'pendiente' }
 }
 

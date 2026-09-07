@@ -5,35 +5,18 @@ import api from '../../services/api'
 import { useAuthStore } from '../../store/auth'
 import Badge from '../../components/ui/Badge.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
-
-const ESTADO_BADGE = {
-  planeacion: 'blue',
-  picky: 'navy',
-  pesaje: 'navy',
-  mezcla: 'navy',
-  extrusion: 'navy',
-  calidad: 'navy',
-  empaque: 'navy',
-  finalizada: 'gray',
-  cancelada: 'red',
-}
-
-const CLASIFICACION_BADGE = {
-  urgente: 'amber',
-  peligroso: 'red',
-  normal: 'gray',
-}
-
-const CLASIFICACION_OPCIONES = [
-  { value: 'normal', label: 'Proceso normal' },
-  { value: 'urgente', label: 'Urgente' },
-  { value: 'peligroso', label: 'Producto peligroso' },
-]
+import OrdenResumen from '../../components/produccion/OrdenResumen.vue'
+import OrdenTrazabilidad from '../../components/produccion/OrdenTrazabilidad.vue'
+import {
+  CLASIFICACION_BADGE,
+  CLASIFICACION_OPCIONES,
+  ESTADO_BADGE,
+} from '../../utils/ordenes'
 
 const route = useRoute()
 const auth = useAuthStore()
 // Solo Producción (rol 'produccion') diligencia clasificación/observaciones
-// al "ingresar a la OP" (ver EsProduccion en el backend); Admin/Supervisor
+// y libera la OP a Picky (ver EsProduccion en el backend); Admin/Supervisor
 // las consultan de solo lectura.
 const esProduccion = computed(() => auth.rol === 'produccion')
 
@@ -44,6 +27,13 @@ const formIngreso = ref({ clasificacion: 'normal', observaciones: '' })
 const guardando = ref(false)
 const errorGuardar = ref('')
 const guardadoOk = ref(false)
+
+const enviando = ref(false)
+const errorEnvio = ref('')
+
+const puedeEnviarAPicky = computed(
+  () => esProduccion.value && orden.value?.estado === 'produccion',
+)
 
 async function cargarOrden() {
   cargando.value = true
@@ -72,32 +62,20 @@ async function guardarIngreso() {
   }
 }
 
-function formatearFecha(fecha) {
-  if (!fecha) return '—'
-  return new Date(`${fecha}T00:00:00`).toLocaleDateString('es-CO', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
-}
-
-function formatearHora(hora) {
-  if (!hora) return '—'
-  return new Date(`1970-01-01T${hora}`).toLocaleTimeString('es-CO', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function formatearFechaHora(fechaIso) {
-  if (!fechaIso) return '—'
-  return new Date(fechaIso).toLocaleString('es-CO', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+async function mandarAPicky() {
+  errorEnvio.value = ''
+  enviando.value = true
+  try {
+    const { data } = await api.patch(`/produccion/ordenes/${route.params.id}/enviar-picky/`)
+    orden.value = data
+  } catch (e) {
+    const detalle = e.response?.data?.non_field_errors
+    errorEnvio.value = Array.isArray(detalle)
+      ? detalle[0]
+      : 'No se pudo mandar la orden a Picky.'
+  } finally {
+    enviando.value = false
+  }
 }
 
 onMounted(cargarOrden)
@@ -120,88 +98,11 @@ onMounted(cargarOrden)
         <Badge :color="ESTADO_BADGE[orden.estado]">{{ orden.estado_display }}</Badge>
       </div>
 
-      <section class="mb-6 rounded-xl bg-white p-5 shadow-sm">
-        <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
-          Datos del pedido
-        </h2>
-        <dl class="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-          <div>
-            <dt class="text-ink-500">Código</dt>
-            <dd class="font-medium text-ink-900">{{ orden.codigo_producto }}</dd>
-          </div>
-          <div>
-            <dt class="text-ink-500">Referencia</dt>
-            <dd class="font-medium text-ink-900">{{ orden.referencia }}</dd>
-          </div>
-          <div>
-            <dt class="text-ink-500">Cantidad</dt>
-            <dd class="font-medium text-ink-900">
-              {{ orden.cantidad }} {{ orden.unidad }}
-            </dd>
-          </div>
-          <div>
-            <dt class="text-ink-500">Cliente</dt>
-            <dd class="font-medium text-ink-900">{{ orden.cliente || '—' }}</dd>
-          </div>
-          <div>
-            <dt class="text-ink-500">C. Cliente</dt>
-            <dd class="font-medium text-ink-900">{{ orden.codigo_cliente }}</dd>
-          </div>
-          <div>
-            <dt class="text-ink-500">Pedido</dt>
-            <dd class="font-medium text-ink-900">{{ orden.pedido }}</dd>
-          </div>
-          <div>
-            <dt class="text-ink-500">Fecha Pedido</dt>
-            <dd class="font-medium text-ink-900">{{ formatearFecha(orden.fecha_pedido) }}</dd>
-          </div>
-          <div>
-            <dt class="text-ink-500">Hora Pedido</dt>
-            <dd class="font-medium text-ink-900">{{ formatearHora(orden.hora_pedido) }}</dd>
-          </div>
-          <div>
-            <dt class="text-ink-500">Vencimiento Pedido</dt>
-            <dd class="font-medium text-ink-900">{{ formatearFecha(orden.vencimiento_pedido) }}</dd>
-          </div>
-          <div>
-            <dt class="text-ink-500">Fecha Hora Lote</dt>
-            <dd class="font-medium text-ink-900">{{ formatearFechaHora(orden.fecha_hora_lote) }}</dd>
-          </div>
-        </dl>
-      </section>
+      <OrdenResumen :orden="orden" />
+
+      <OrdenTrazabilidad :orden="orden" />
 
       <section class="mb-6 rounded-xl bg-white p-5 shadow-sm">
-        <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">Materiales</h2>
-        <div class="overflow-x-auto rounded-lg border border-slate-100">
-          <table class="w-full min-w-[560px] text-left text-sm">
-            <thead class="bg-surface-alt text-xs font-semibold uppercase text-ink-500">
-              <tr>
-                <th class="px-4 py-2">Código</th>
-                <th class="px-4 py-2">Descripción</th>
-                <th class="px-4 py-2">%</th>
-                <th class="px-4 py-2">Cantidad</th>
-                <th class="px-4 py-2">Localización</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-              <tr v-if="orden.materiales.length === 0">
-                <td colspan="5" class="px-4 py-6 text-center text-ink-500">
-                  Esta orden no tiene materiales registrados.
-                </td>
-              </tr>
-              <tr v-for="material in orden.materiales" :key="material.id">
-                <td class="px-4 py-2 text-ink-900">{{ material.codigo || '—' }}</td>
-                <td class="px-4 py-2 text-ink-900">{{ material.descripcion }}</td>
-                <td class="px-4 py-2 text-ink-500">{{ material.porcentaje }}%</td>
-                <td class="px-4 py-2 text-ink-500">{{ material.cantidad }}</td>
-                <td class="px-4 py-2 text-ink-500">{{ material.localizacion || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="rounded-xl bg-white p-5 shadow-sm">
         <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">Producción</h2>
 
         <form v-if="esProduccion" class="space-y-4" @submit.prevent="guardarIngreso">
@@ -263,6 +164,34 @@ onMounted(cargarOrden)
             </dd>
           </div>
         </dl>
+      </section>
+
+      <!-- Liberación a Picky: solo Producción y solo mientras la OP siga aquí -->
+      <section v-if="esProduccion" class="rounded-xl bg-white p-5 shadow-sm">
+        <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
+          Liberar a Picky
+        </h2>
+
+        <template v-if="puedeEnviarAPicky">
+          <p class="mb-4 text-sm text-ink-500">
+            Al mandarla, la orden pasa a Picky y queda registrada la fecha y hora del envío.
+          </p>
+          <p v-if="errorEnvio" class="mb-3 text-sm text-danger">{{ errorEnvio }}</p>
+          <BaseButton
+            variant="primary"
+            class="w-full sm:w-auto"
+            :loading="enviando"
+            @click="mandarAPicky"
+          >
+            Mandar orden a Picky
+          </BaseButton>
+        </template>
+
+        <p v-else class="text-sm text-ink-500">
+          Esta orden ya salió de Producción; su estado actual es
+          <span class="font-semibold text-ink-900">{{ orden.estado_display }}</span
+          >.
+        </p>
       </section>
     </template>
   </main>
