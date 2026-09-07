@@ -9,6 +9,13 @@ import Badge from '../../components/ui/Badge.vue'
 const ROL_BADGE = {
   admin: 'navy',
   supervisor: 'blue',
+  produccion: 'amber',
+  picky: 'gray',
+  pesaje: 'gray',
+  mezcla: 'gray',
+  extrusion: 'gray',
+  calidad: 'gray',
+  empaque: 'gray',
   planta: 'gray',
 }
 
@@ -33,9 +40,12 @@ const errorPassword = ref('')
 const guardandoPassword = ref(false)
 
 // --- Editar usuario: estado y rol (HU-05 / HU-06) ---
+// En Polygon los usuarios son máquinas/estaciones, no personas: la edición
+// solo permite cambiar el rol y activar/desactivar la cuenta (nombre y
+// apellido no son editables aquí, ver UsuarioUpdateSerializer en backend).
 const modalEditarAbierto = ref(false)
 const usuarioEditando = ref(null)
-const formEditar = ref({ first_name: '', last_name: '', rol: 'planta', is_active: true })
+const formEditar = ref({ rol: 'planta', is_active: true })
 const erroresEditar = ref({})
 const guardandoEdicion = ref(false)
 
@@ -102,8 +112,6 @@ function mapearErroresCampo(e) {
 function abrirModalEditar(usuario) {
   usuarioEditando.value = usuario
   formEditar.value = {
-    first_name: usuario.first_name,
-    last_name: usuario.last_name,
     rol: usuario.rol,
     is_active: usuario.is_active,
   }
@@ -137,16 +145,18 @@ onMounted(cargarUsuarios)
 </script>
 
 <template>
-  <main class="px-6 py-8">
-    <div class="mb-6 flex items-start justify-between">
+  <main class="px-4 py-6 sm:px-6 sm:py-8">
+    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-ink-900">Gestión de Usuarios</h1>
+        <h1 class="text-xl font-bold text-ink-900 sm:text-2xl">Gestión de Usuarios</h1>
       </div>
-      <BaseButton variant="primary" @click="abrirModalCrear">+ Nuevo usuario</BaseButton>
+      <BaseButton variant="primary" class="w-full sm:w-auto" @click="abrirModalCrear">
+        + Nuevo usuario
+      </BaseButton>
     </div>
 
-    <div class="overflow-hidden rounded-xl bg-white shadow-sm">
-      <table class="w-full text-left text-sm">
+    <div class="overflow-x-auto rounded-xl bg-white shadow-sm">
+      <table class="w-full min-w-[640px] text-left text-sm">
         <thead class="bg-surface-alt text-xs font-semibold uppercase text-ink-500">
           <tr>
             <th class="px-6 py-3">Usuario</th>
@@ -180,21 +190,23 @@ onMounted(cargarUsuarios)
               </Badge>
             </td>
             <td class="px-6 py-3 text-ink-500">{{ formatearFecha(usuario.date_joined) }}</td>
-            <td class="px-6 py-3 space-x-3">
-              <button
-                type="button"
-                class="font-semibold text-accent-blue hover:underline"
-                @click="abrirModalEditar(usuario)"
-              >
-                Editar
-              </button>
-              <button
-                type="button"
-                class="font-semibold text-accent-blue hover:underline"
-                @click="abrirModalPassword(usuario)"
-              >
-                Cambiar contraseña
-              </button>
+            <td class="px-6 py-3">
+              <div class="flex flex-wrap gap-x-3 gap-y-1">
+                <button
+                  type="button"
+                  class="font-semibold text-accent-blue hover:underline"
+                  @click="abrirModalEditar(usuario)"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  class="font-semibold text-accent-blue hover:underline"
+                  @click="abrirModalPassword(usuario)"
+                >
+                  Cambiar contraseña
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -217,7 +229,7 @@ onMounted(cargarUsuarios)
           :error="erroresCrear.password"
           required
         />
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <BaseInput v-model="nuevoUsuario.first_name" label="Nombre (opcional)" />
           <BaseInput v-model="nuevoUsuario.last_name" label="Apellido (opcional)" />
         </div>
@@ -229,15 +241,27 @@ onMounted(cargarUsuarios)
           >
             <option value="admin">Administrador</option>
             <option value="supervisor">Supervisor</option>
+            <option value="produccion">Producción</option>
+            <option value="picky">Picky</option>
+            <option value="pesaje">Pesaje</option>
+            <option value="mezcla">Mezcla</option>
+            <option value="extrusion">Extrusión</option>
+            <option value="calidad">Calidad</option>
+            <option value="empaque">Empaque</option>
             <option value="planta">Personal de Planta</option>
           </select>
         </label>
 
-        <div class="flex justify-end gap-3 pt-2">
-          <BaseButton type="button" variant="secondary" @click="modalCrearAbierto = false">
+        <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+          <BaseButton
+            type="button"
+            variant="secondary"
+            class="w-full sm:w-auto"
+            @click="modalCrearAbierto = false"
+          >
             Cancelar
           </BaseButton>
-          <BaseButton type="submit" variant="primary" :loading="guardandoUsuario">
+          <BaseButton type="submit" variant="primary" class="w-full sm:w-auto" :loading="guardandoUsuario">
             Crear usuario
           </BaseButton>
         </div>
@@ -257,11 +281,16 @@ onMounted(cargarUsuarios)
           :error="errorPassword"
           required
         />
-        <div class="flex justify-end gap-3 pt-2">
-          <BaseButton type="button" variant="secondary" @click="modalPasswordAbierto = false">
+        <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+          <BaseButton
+            type="button"
+            variant="secondary"
+            class="w-full sm:w-auto"
+            @click="modalPasswordAbierto = false"
+          >
             Cancelar
           </BaseButton>
-          <BaseButton type="submit" variant="primary" :loading="guardandoPassword">
+          <BaseButton type="submit" variant="primary" class="w-full sm:w-auto" :loading="guardandoPassword">
             Guardar
           </BaseButton>
         </div>
@@ -275,18 +304,9 @@ onMounted(cargarUsuarios)
       @close="modalEditarAbierto = false"
     >
       <form class="space-y-4" @submit.prevent="guardarEdicion">
-        <div class="grid grid-cols-2 gap-3">
-          <BaseInput
-            v-model="formEditar.first_name"
-            label="Nombre"
-            :error="erroresEditar.first_name"
-          />
-          <BaseInput
-            v-model="formEditar.last_name"
-            label="Apellido"
-            :error="erroresEditar.last_name"
-          />
-        </div>
+        <p class="text-sm text-ink-500">
+          Usuario: <span class="font-semibold text-ink-900">{{ usuarioEditando?.username }}</span>
+        </p>
         <label class="block">
           <span class="mb-1.5 block text-sm font-medium text-ink-900">Rol</span>
           <select
@@ -295,6 +315,13 @@ onMounted(cargarUsuarios)
           >
             <option value="admin">Administrador</option>
             <option value="supervisor">Supervisor</option>
+            <option value="produccion">Producción</option>
+            <option value="picky">Picky</option>
+            <option value="pesaje">Pesaje</option>
+            <option value="mezcla">Mezcla</option>
+            <option value="extrusion">Extrusión</option>
+            <option value="calidad">Calidad</option>
+            <option value="empaque">Empaque</option>
             <option value="planta">Personal de Planta</option>
           </select>
           <span v-if="erroresEditar.rol" class="mt-1 block text-sm text-danger">{{ erroresEditar.rol }}</span>
@@ -304,11 +331,16 @@ onMounted(cargarUsuarios)
           <span class="text-sm font-medium text-ink-900">Usuario activo</span>
         </label>
 
-        <div class="flex justify-end gap-3 pt-2">
-          <BaseButton type="button" variant="secondary" @click="modalEditarAbierto = false">
+        <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+          <BaseButton
+            type="button"
+            variant="secondary"
+            class="w-full sm:w-auto"
+            @click="modalEditarAbierto = false"
+          >
             Cancelar
           </BaseButton>
-          <BaseButton type="submit" variant="primary" :loading="guardandoEdicion">
+          <BaseButton type="submit" variant="primary" class="w-full sm:w-auto" :loading="guardandoEdicion">
             Guardar cambios
           </BaseButton>
         </div>

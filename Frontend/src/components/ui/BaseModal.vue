@@ -20,7 +20,7 @@ defineEmits(['close'])
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       @click.self="$emit('close')"
     >
-      <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+      <div class="flex max-h-[90vh] w-full max-w-md flex-col rounded-2xl bg-white p-4 shadow-xl sm:p-6">
         <div class="mb-4 flex items-center justify-between">
           <h2 class="text-lg font-bold text-ink-900">{{ title }}</h2>
           <button
@@ -32,7 +32,7 @@ defineEmits(['close'])
           </button>
         </div>
 
-        <div>
+        <div class="overflow-y-auto">
           <slot />
         </div>
 
