@@ -5,12 +5,17 @@ from . import views
 urlpatterns = [
     path(
         'ordenes/',
-        views.OrdenProduccionListCreateView.as_view(),
-        name='ordenes-list-create',
+        views.OrdenProduccionListView.as_view(),
+        name='ordenes-list',
     ),
     path(
         'ordenes/<int:pk>/',
-        views.OrdenProduccionDetailUpdateView.as_view(),
-        name='ordenes-detail-update',
+        views.OrdenProduccionDetailView.as_view(),
+        name='ordenes-detail',
+    ),
+    path(
+        'ordenes/<int:pk>/ingresar/',
+        views.OrdenProduccionIngresarView.as_view(),
+        name='ordenes-ingresar',
     ),
 ]

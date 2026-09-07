@@ -15,7 +15,9 @@ from .serializers import (
 )
 
 # Campos que se rastrean en RegistroAuditoriaUsuario cuando cambian.
-CAMPOS_AUDITADOS = ['first_name', 'last_name', 'rol', 'is_active']
+# Nombre y apellido no se incluyen: no son editables desde
+# UsuarioDetailUpdateView (ver UsuarioUpdateSerializer).
+CAMPOS_AUDITADOS = ['rol', 'is_active']
 
 
 class LoginView(APIView):

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import HistorialOrdenProduccion, OrdenProduccion
+from .models import HistorialOrdenProduccion, MaterialOrden, OrdenProduccion
 
 
 class HistorialOrdenProduccionSerializer(serializers.ModelSerializer):
@@ -20,21 +20,50 @@ class HistorialOrdenProduccionSerializer(serializers.ModelSerializer):
         ]
 
 
+class MaterialOrdenSerializer(serializers.ModelSerializer):
+    """Fila de la tabla de materiales del documento (solo lectura desde la API)."""
+
+    class Meta:
+        model = MaterialOrden
+        fields = ['id', 'codigo', 'descripcion', 'porcentaje', 'cantidad', 'localizacion']
+        read_only_fields = fields
+
+
 class OrdenProduccionSerializer(serializers.ModelSerializer):
-    """Serializer de lectura (HU-12 Consultar OP y detalle de HU-10/HU-11)."""
+    """
+    Serializer de lectura de la OP: encabezado real (Sumicolor) + tabla de
+    materiales + clasificación/observaciones (Producción). Se usa tanto
+    para el listado como para el detalle; el encabezado y los materiales
+    solo se cargan por Django admin (ver apps.produccion.admin), la API
+    únicamente los expone en modo lectura.
+    """
 
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    clasificacion_display = serializers.CharField(
+        source='get_clasificacion_display', read_only=True
+    )
     creado_por_username = serializers.CharField(source='creado_por.username', read_only=True)
+    materiales = MaterialOrdenSerializer(many=True, read_only=True)
 
     class Meta:
         model = OrdenProduccion
         fields = [
             'id',
             'numero_orden',
-            'producto',
+            'codigo_producto',
+            'referencia',
             'cantidad',
-            'materia_prima',
-            'urgente',
+            'unidad',
+            'cliente',
+            'codigo_cliente',
+            'pedido',
+            'fecha_pedido',
+            'hora_pedido',
+            'vencimiento_pedido',
+            'fecha_hora_lote',
+            'materiales',
+            'clasificacion',
+            'clasificacion_display',
             'observaciones',
             'estado',
             'estado_display',
@@ -46,53 +75,23 @@ class OrdenProduccionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class OrdenProduccionCreateSerializer(serializers.ModelSerializer):
-    """HU-10 Crear Orden de Producción."""
-
-    class Meta:
-        model = OrdenProduccion
-        fields = ['producto', 'cantidad', 'materia_prima', 'urgente', 'observaciones']
-
-    def validate_cantidad(self, value):
-        if value <= 0:
-            raise serializers.ValidationError('La cantidad debe ser mayor a cero.')
-        return value
-
-    def validate_producto(self, value):
-        if not value.strip():
-            raise serializers.ValidationError('El producto es obligatorio.')
-        return value
-
-    def validate_materia_prima(self, value):
-        if not value.strip():
-            raise serializers.ValidationError('La materia prima es obligatoria.')
-        return value
-
-    def create(self, validated_data):
-        validated_data['creado_por'] = self.context['request'].user
-        return OrdenProduccion.objects.create(**validated_data)
-
-
-class OrdenProduccionUpdateSerializer(serializers.ModelSerializer):
+class OrdenProduccionIngresarSerializer(serializers.ModelSerializer):
     """
-    HU-11 Editar Orden de Producción.
-
-    Regla de negocio: una OP solo puede editarse mientras está en estado
-    Planeación (no puede editarse una OP que ya inició producción).
+    "Ingresar a OP": único dato que Producción diligencia dentro de
+    Polygon. El resto de la OP (encabezado y materiales) es de solo
+    lectura porque viene de Sumicolor (ver docstring de OrdenProduccion).
     """
 
     class Meta:
         model = OrdenProduccion
-        fields = ['producto', 'cantidad', 'materia_prima', 'urgente', 'observaciones']
-
-    def validate_cantidad(self, value):
-        if value <= 0:
-            raise serializers.ValidationError('La cantidad debe ser mayor a cero.')
-        return value
+        fields = ['clasificacion', 'observaciones']
 
     def validate(self, attrs):
-        if self.instance.estado != OrdenProduccion.Estado.PLANEACION:
+        if self.instance.estado in (
+            OrdenProduccion.Estado.FINALIZADA,
+            OrdenProduccion.Estado.CANCELADA,
+        ):
             raise serializers.ValidationError(
-                'Solo se puede editar una Orden de Producción mientras está en estado Planeación.'
+                'No se puede ingresar a una Orden de Producción Finalizada o Cancelada.'
             )
         return attrs

@@ -4,21 +4,34 @@ from django.db import models
 
 class OrdenProduccion(models.Model):
     """
-    HU-10 Crear Orden de Producción / HU-11 Editar Orden de Producción.
+    Contraste con BD_TABLAS_OP_HP.xlsx / DiccionarioDatos_OP.xlsx (copia de
+    la base de datos legada de Sumicolor): el encabezado completo de la OP
+    física (código de producto, referencia, cantidad, cliente, código de
+    cliente, pedido, fechas de pedido/lote/vencimiento) y el desglose de
+    materias primas (tabla MaterialOrden: código, descripción, %, cantidad)
+    provienen de tablas ya existentes de Sumicolor (vista CantidadesLotes,
+    FrmProductos, Productos, MateriasPrimas, LotesProduccion). Ese
+    diccionario NO tiene ningún campo de observaciones ni de clasificación
+    urgente/peligroso/normal: esos dos sí son datos propios que captura
+    Producción en Polygon (ver OrdenProduccionIngresarSerializer).
 
-    Supuesto (a confirmar con el equipo): esta primera versión modela los
-    campos explícitamente mencionados en las HU (número de orden, producto,
-    cantidad, materia prima, observaciones) más 'urgente', pedido por el
-    negocio para que Adriana (Planeación) marque la orden antes de pasarla
-    a Picky. No se modela un catálogo de Productos/Materias Primas (eso
-    corresponde a HU-09 'Gestionar catálogos', fuera del alcance de esta
-    tarea) ni un desglose de materias primas con porcentaje por lote (como
-    existe en el sistema legado de Sumicolor: tablas CantidadesLotes /
-    FrmProductos en DiccionarioDatos_OP.xlsx). Aquí 'materia_prima' es un
-    campo de texto libre. Si Sumicolor requiere varias materias primas por
-    orden, cada una con su propia cantidad, este modelo debería evolucionar
-    a una tabla relacionada (similar a CantidadesLotes).
+    Regla de negocio: la OP no se crea/edita desde Polygon — llega ya hecha
+    de Sumicolor. Mientras no exista esa integración, el encabezado y los
+    materiales se cargan por Django admin (ver OrdenProduccionAdmin); la
+    API REST solo los expone en modo lectura. Por eso 'codigo_producto',
+    'referencia', 'cliente', etc. no tienen serializer de escritura.
+
+    'fecha_hora_lote' se deja opcional (null=True) aunque en Sumicolor es
+    "not null": al cargar la OP en Polygon el lote de producción puede no
+    existir todavía. Fuera de alcance por ahora (sin tabla fuente en el
+    Excel entregado): Procesos/Sec/Tiempo Textil/Nota, y las líneas de
+    firma manual O.P./HP/A mezclas/A calidad del documento impreso.
     """
+
+    class Clasificacion(models.TextChoices):
+        URGENTE = 'urgente', 'Urgente'
+        PELIGROSO = 'peligroso', 'Producto peligroso'
+        NORMAL = 'normal', 'Proceso normal'
 
     class Estado(models.TextChoices):
         PLANEACION = 'planeacion', 'Planeación'
@@ -31,12 +44,28 @@ class OrdenProduccion(models.Model):
         FINALIZADA = 'finalizada', 'Finalizada'
         CANCELADA = 'cancelada', 'Cancelada'
 
+    # --- Identificación (Polygon vs. Sumicolor) ---
     numero_orden = models.CharField(max_length=20, unique=True, editable=False)
-    producto = models.CharField(max_length=120)
+    codigo_producto = models.CharField('código', max_length=20)
+
+    # --- Encabezado (Sumicolor: vista CantidadesLotes) ---
+    referencia = models.CharField(max_length=120)
     cantidad = models.FloatField()
-    materia_prima = models.CharField(max_length=120)
-    urgente = models.BooleanField(default=False)
+    unidad = models.CharField(max_length=10, blank=True)
+    cliente = models.CharField(max_length=100, blank=True)
+    codigo_cliente = models.CharField(max_length=15)
+    pedido = models.CharField(max_length=9)
+    fecha_pedido = models.DateField(null=True, blank=True)
+    hora_pedido = models.TimeField(null=True, blank=True)
+    vencimiento_pedido = models.DateField()
+    fecha_hora_lote = models.DateTimeField(null=True, blank=True)
+
+    # --- Propios de Polygon (los diligencia Producción al "ingresar a la OP") ---
+    clasificacion = models.CharField(
+        max_length=20, choices=Clasificacion.choices, default=Clasificacion.NORMAL
+    )
     observaciones = models.TextField(blank=True)
+
     estado = models.CharField(
         max_length=20, choices=Estado.choices, default=Estado.PLANEACION
     )
@@ -44,6 +73,9 @@ class OrdenProduccion(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name='ordenes_creadas',
+        # blank=True: en el admin se autocompleta con el usuario actual si
+        # se deja vacío (ver OrdenProduccionAdmin.save_model).
+        blank=True,
     )
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_modificacion = models.DateTimeField(auto_now=True)
@@ -71,6 +103,34 @@ class OrdenProduccion(models.Model):
         ultimo = OrdenProduccion.objects.order_by('-id').first()
         siguiente = (ultimo.id + 1) if ultimo else 1
         return f'OP-{siguiente:06d}'
+
+
+class MaterialOrden(models.Model):
+    """
+    Una fila de la tabla de materiales del documento físico de OP (columnas
+    Código/Descripción/%/Cantidad/Localización). En Sumicolor sale de
+    FrmProductos/Productos/MateriasPrimas por cada OP; aquí se carga junto
+    con el encabezado (ver OrdenProduccion) por Django admin mientras no
+    exista la integración real. 'localizacion' queda como texto libre: en
+    Sumicolor es un valor compuesto/derivado (ej. "W01 - H320 = 4.0000"),
+    sin una columna simple confirmada en el diccionario de datos.
+    """
+
+    orden = models.ForeignKey(
+        OrdenProduccion, on_delete=models.CASCADE, related_name='materiales'
+    )
+    codigo = models.CharField(max_length=20)
+    descripcion = models.CharField(max_length=120)
+    porcentaje = models.FloatField()
+    cantidad = models.FloatField()
+    localizacion = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        verbose_name = 'Material de Orden de Producción'
+        verbose_name_plural = 'Materiales de Orden de Producción'
+
+    def __str__(self):
+        return f'{self.orden.numero_orden} · {self.codigo} ({self.porcentaje}%)'
 
 
 class HistorialOrdenProduccion(models.Model):

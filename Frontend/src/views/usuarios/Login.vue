@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { destinoSegunRol } from '../../router'
 import { useAuthStore } from '../../store/auth'
 import BaseInput from '../../components/ui/BaseInput.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
@@ -18,7 +19,7 @@ async function onSubmit() {
   loading.value = true
   try {
     await auth.login(username.value, password.value)
-    router.push(auth.rol === 'admin' ? { name: 'admin-usuarios' } : { name: 'pendiente' })
+    router.push(destinoSegunRol(auth.rol))
   } catch (e) {
     const detail = e.response?.data?.detail
     error.value = Array.isArray(detail) ? detail[0] : detail || 'No se pudo iniciar sesión.'

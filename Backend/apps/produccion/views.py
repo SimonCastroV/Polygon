@@ -1,57 +1,54 @@
-from rest_framework import generics, status
+from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
 
 from .models import HistorialOrdenProduccion, OrdenProduccion
-from .permissions import PuedeGestionarOP
-from .serializers import (
-    OrdenProduccionCreateSerializer,
-    OrdenProduccionSerializer,
-    OrdenProduccionUpdateSerializer,
-)
+from .permissions import EsProduccion, PuedeVerOP
+from .serializers import OrdenProduccionIngresarSerializer, OrdenProduccionSerializer
 
-# Campos que se rastrean en HistorialOrdenProduccion cuando cambian.
-CAMPOS_AUDITADOS = ['producto', 'cantidad', 'materia_prima', 'urgente', 'observaciones']
+# Campos que se rastrean en HistorialOrdenProduccion cuando cambian al
+# "ingresar a la OP" (único dato editable desde la API, ver
+# OrdenProduccionIngresarSerializer).
+CAMPOS_AUDITADOS = ['clasificacion', 'observaciones']
 
 
-class OrdenProduccionListCreateView(generics.ListCreateAPIView):
+class OrdenProduccionListView(generics.ListAPIView):
     """
-    HU-10 Crear Orden de Producción.
-    GET  /api/produccion/ordenes/  -> listado (usado también por HU-12).
-    POST /api/produccion/ordenes/  -> crea la OP en estado 'planeacion' con
-    un número de orden único autogenerado.
+    GET /api/produccion/ordenes/ -> listado de OP, accesible a Producción,
+    Supervisor y Administrador. Encabezado y materiales son de solo
+    lectura: la OP llega ya hecha de Sumicolor (por ahora, cargada por
+    Django admin) y no se crea/edita desde Polygon.
     """
 
+    queryset = OrdenProduccion.objects.prefetch_related('materiales').all()
+    serializer_class = OrdenProduccionSerializer
+    permission_classes = [IsAuthenticated, PuedeVerOP]
+
+
+class OrdenProduccionDetailView(generics.RetrieveAPIView):
+    """
+    GET /api/produccion/ordenes/<pk>/ -> detalle completo de la OP
+    (encabezado + tabla de materiales), accesible a Producción, Supervisor
+    y Administrador.
+    """
+
+    queryset = OrdenProduccion.objects.prefetch_related('materiales').all()
+    serializer_class = OrdenProduccionSerializer
+    permission_classes = [IsAuthenticated, PuedeVerOP]
+
+
+class OrdenProduccionIngresarView(generics.UpdateAPIView):
+    """
+    PATCH /api/produccion/ordenes/<pk>/ingresar/ -> "Ingresar a OP": solo
+    Producción (rol 'produccion') diligencia clasificación y observaciones,
+    sin importar el estado de la OP (mientras no esté Finalizada o
+    Cancelada, ver OrdenProduccionIngresarSerializer). Queda registrado en
+    HistorialOrdenProduccion.
+    """
+
+    http_method_names = ['patch']
     queryset = OrdenProduccion.objects.all()
-    permission_classes = [IsAuthenticated, PuedeGestionarOP]
-
-    def get_serializer_class(self):
-        if self.request.method == 'POST':
-            return OrdenProduccionCreateSerializer
-        return OrdenProduccionSerializer
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data, context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        orden = serializer.save()
-        return Response(OrdenProduccionSerializer(orden).data, status=status.HTTP_201_CREATED)
-
-
-class OrdenProduccionDetailUpdateView(generics.RetrieveUpdateAPIView):
-    """
-    HU-11 Editar Orden de Producción.
-    GET   /api/produccion/ordenes/<pk>/ -> detalle.
-    PATCH/PUT /api/produccion/ordenes/<pk>/ -> edita mientras esté en
-    Planeación; cada campo modificado queda en HistorialOrdenProduccion.
-    """
-
-    queryset = OrdenProduccion.objects.all()
-    permission_classes = [IsAuthenticated, PuedeGestionarOP]
-
-    def get_serializer_class(self):
-        if self.request.method == 'GET':
-            return OrdenProduccionSerializer
-        return OrdenProduccionUpdateSerializer
+    serializer_class = OrdenProduccionIngresarSerializer
+    permission_classes = [IsAuthenticated, EsProduccion]
 
     def perform_update(self, serializer):
         orden = self.get_object()

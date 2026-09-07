@@ -75,15 +75,19 @@ class RegistroAuditoriaUsuarioSerializer(serializers.ModelSerializer):
 class UsuarioUpdateSerializer(serializers.ModelSerializer):
     """
     HU-05 (Editar usuario) y HU-06 (Asignar roles y permisos).
-    Ambas historias comparten el mismo dato editable del usuario (estado y
-    rol), así que se expone un único endpoint de edición; el rol sigue
+
+    En Polygon los usuarios representan principalmente máquinas/equipos o
+    estaciones de trabajo, no personas con nombre propio, por lo que la
+    edición de un usuario solo permite cambiar su rol (y activarlo o
+    desactivarlo); nombre y apellido no son editables desde este endpoint
+    (solo se definen, opcionalmente, al crear el usuario). El rol sigue
     siendo un único CharField, por lo que "cada usuario tiene un único rol
     principal" (regla de negocio de HU-06) se cumple de forma natural.
     """
 
     class Meta:
         model = CustomUser
-        fields = ['first_name', 'last_name', 'rol', 'is_active']
+        fields = ['rol', 'is_active']
 
     def validate_rol(self, value):
         if value not in CustomUser.Rol.values:

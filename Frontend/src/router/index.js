@@ -16,13 +16,18 @@ const routes = [
   {
     path: '/admin',
     component: () => import('../layouts/AdminLayout.vue'),
-    meta: { requiresAuth: true, rolesPermitidos: ['admin', 'supervisor'] },
+    // 'produccion' = estación de Producción (primer eslabón del flujo,
+    // antes de Picky). Solo puede consultar/diligenciar OP, no gestionar
+    // usuarios. No incluye 'planta' (Personal de Planta genérico, ej.
+    // Pesaje), que no debe ver esta pantalla (ver también PuedeVerOP en el
+    // backend).
+    meta: { requiresAuth: true, rolesPermitidos: ['admin', 'supervisor', 'produccion'] },
     children: [
       {
         path: '',
         redirect: () => {
           const auth = useAuthStore()
-          return auth.rol === 'admin' ? { name: 'admin-usuarios' } : { name: 'admin-ordenes-produccion' }
+          return destinoSegunRol(auth.rol)
         },
       },
       {
@@ -35,7 +40,13 @@ const routes = [
         path: 'produccion/ordenes',
         name: 'admin-ordenes-produccion',
         component: () => import('../views/produccion/OrdenesProduccion.vue'),
-        meta: { rolesPermitidos: ['admin', 'supervisor'] },
+        meta: { rolesPermitidos: ['admin', 'supervisor', 'produccion'] },
+      },
+      {
+        path: 'produccion/ordenes/:id',
+        name: 'admin-orden-detalle',
+        component: () => import('../views/produccion/OrdenProduccionDetalle.vue'),
+        meta: { rolesPermitidos: ['admin', 'supervisor', 'produccion'] },
       },
     ],
   },
@@ -54,9 +65,9 @@ const router = createRouter({
   routes,
 })
 
-function destinoSegunRol(rol) {
+export function destinoSegunRol(rol) {
   if (rol === 'admin') return { name: 'admin-usuarios' }
-  if (rol === 'supervisor') return { name: 'admin-ordenes-produccion' }
+  if (rol === 'supervisor' || rol === 'produccion') return { name: 'admin-ordenes-produccion' }
   return { name: 'pendiente' }
 }
 
