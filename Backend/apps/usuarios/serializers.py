@@ -2,7 +2,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import CustomUser
+from .models import CustomUser, RegistroAuditoriaUsuario
 
 
 class LoginSerializer(serializers.Serializer):
@@ -53,6 +53,42 @@ class UsuarioCreateSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         return user
+
+
+class RegistroAuditoriaUsuarioSerializer(serializers.ModelSerializer):
+    modificado_por_username = serializers.CharField(
+        source='modificado_por.username', read_only=True, default=None
+    )
+
+    class Meta:
+        model = RegistroAuditoriaUsuario
+        fields = [
+            'id',
+            'campo',
+            'valor_anterior',
+            'valor_nuevo',
+            'modificado_por_username',
+            'fecha',
+        ]
+
+
+class UsuarioUpdateSerializer(serializers.ModelSerializer):
+    """
+    HU-05 (Editar usuario) y HU-06 (Asignar roles y permisos).
+    Ambas historias comparten el mismo dato editable del usuario (estado y
+    rol), así que se expone un único endpoint de edición; el rol sigue
+    siendo un único CharField, por lo que "cada usuario tiene un único rol
+    principal" (regla de negocio de HU-06) se cumple de forma natural.
+    """
+
+    class Meta:
+        model = CustomUser
+        fields = ['first_name', 'last_name', 'rol', 'is_active']
+
+    def validate_rol(self, value):
+        if value not in CustomUser.Rol.values:
+            raise serializers.ValidationError('Rol no válido.')
+        return value
 
 
 class CambiarPasswordSerializer(serializers.Serializer):
