@@ -4,14 +4,18 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import CustomUser
+from .models import CustomUser, RegistroAuditoriaUsuario
 from .permissions import EsAdministrador
 from .serializers import (
     CambiarPasswordSerializer,
     LoginSerializer,
     UsuarioCreateSerializer,
     UsuarioSerializer,
+    UsuarioUpdateSerializer,
 )
+
+# Campos que se rastrean en RegistroAuditoriaUsuario cuando cambian.
+CAMPOS_AUDITADOS = ['first_name', 'last_name', 'rol', 'is_active']
 
 
 class LoginView(APIView):
@@ -52,6 +56,47 @@ class UsuarioListCreateView(generics.ListCreateAPIView):
         serializer.is_valid(raise_exception=True)
         usuario = serializer.save()
         return Response(UsuarioSerializer(usuario).data, status=status.HTTP_201_CREATED)
+
+
+class UsuarioDetailUpdateView(generics.RetrieveUpdateAPIView):
+    """
+    HU-05 Editar usuario / HU-06 Asignar roles y permisos.
+
+    GET  /api/usuarios/<pk>/  -> detalle del usuario.
+    PATCH/PUT /api/usuarios/<pk>/ -> edita nombre, apellido, rol y estado
+    (is_active). Cada campo que cambie queda registrado en
+    RegistroAuditoriaUsuario.
+    """
+
+    queryset = CustomUser.objects.all()
+    permission_classes = [IsAuthenticated, EsAdministrador]
+
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return UsuarioSerializer
+        return UsuarioUpdateSerializer
+
+    def perform_update(self, serializer):
+        usuario = self.get_object()
+        valores_anteriores = {campo: getattr(usuario, campo) for campo in CAMPOS_AUDITADOS}
+        usuario_actualizado = serializer.save()
+
+        for campo in CAMPOS_AUDITADOS:
+            valor_anterior = valores_anteriores[campo]
+            valor_nuevo = getattr(usuario_actualizado, campo)
+            if valor_anterior != valor_nuevo:
+                RegistroAuditoriaUsuario.objects.create(
+                    usuario=usuario_actualizado,
+                    modificado_por=self.request.user,
+                    campo=campo,
+                    valor_anterior=str(valor_anterior),
+                    valor_nuevo=str(valor_nuevo),
+                )
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        response.data = UsuarioSerializer(self.get_object()).data
+        return response
 
 
 class CambiarPasswordView(APIView):

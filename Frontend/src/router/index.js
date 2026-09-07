@@ -16,16 +16,26 @@ const routes = [
   {
     path: '/admin',
     component: () => import('../layouts/AdminLayout.vue'),
-    meta: { requiresAuth: true, rolesPermitidos: ['admin'] },
+    meta: { requiresAuth: true, rolesPermitidos: ['admin', 'supervisor'] },
     children: [
       {
         path: '',
-        redirect: { name: 'admin-usuarios' },
+        redirect: () => {
+          const auth = useAuthStore()
+          return auth.rol === 'admin' ? { name: 'admin-usuarios' } : { name: 'admin-ordenes-produccion' }
+        },
       },
       {
         path: 'usuarios',
         name: 'admin-usuarios',
         component: () => import('../views/usuarios/GestionUsuarios.vue'),
+        meta: { rolesPermitidos: ['admin'] },
+      },
+      {
+        path: 'produccion/ordenes',
+        name: 'admin-ordenes-produccion',
+        component: () => import('../views/produccion/OrdenesProduccion.vue'),
+        meta: { rolesPermitidos: ['admin', 'supervisor'] },
       },
     ],
   },
@@ -45,7 +55,9 @@ const router = createRouter({
 })
 
 function destinoSegunRol(rol) {
-  return rol === 'admin' ? { name: 'admin-usuarios' } : { name: 'pendiente' }
+  if (rol === 'admin') return { name: 'admin-usuarios' }
+  if (rol === 'supervisor') return { name: 'admin-ordenes-produccion' }
+  return { name: 'pendiente' }
 }
 
 router.beforeEach((to) => {

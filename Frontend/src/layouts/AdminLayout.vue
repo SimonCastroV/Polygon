@@ -32,6 +32,27 @@ async function cerrarSesion() {
       </div>
     </header>
 
+    <nav class="flex gap-1 border-b border-slate-200 bg-white px-6">
+      <router-link
+        v-if="auth.rol === 'admin'"
+        :to="{ name: 'admin-usuarios' }"
+        class="border-b-2 px-3 py-3 text-sm font-semibold"
+        active-class="border-navy-900 text-navy-900"
+        exact-active-class="border-navy-900 text-navy-900"
+      >
+        Usuarios
+      </router-link>
+      <router-link
+        :to="{ name: 'admin-ordenes-produccion' }"
+        class="border-b-2 px-3 py-3 text-sm font-semibold"
+        active-class="border-navy-900 text-navy-900"
+        exact-active-class="border-navy-900 text-navy-900"
+      >
+        Órdenes de Producción
+      </router-link>
+    </nav>
+
     <router-view />
   </div>
 </template>
+

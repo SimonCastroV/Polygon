@@ -32,6 +32,13 @@ const nuevaPassword = ref('')
 const errorPassword = ref('')
 const guardandoPassword = ref(false)
 
+// --- Editar usuario: estado y rol (HU-05 / HU-06) ---
+const modalEditarAbierto = ref(false)
+const usuarioEditando = ref(null)
+const formEditar = ref({ first_name: '', last_name: '', rol: 'planta', is_active: true })
+const erroresEditar = ref({})
+const guardandoEdicion = ref(false)
+
 async function cargarUsuarios() {
   cargando.value = true
   const { data } = await api.get('/usuarios/')
@@ -92,6 +99,32 @@ function mapearErroresCampo(e) {
   return errores
 }
 
+function abrirModalEditar(usuario) {
+  usuarioEditando.value = usuario
+  formEditar.value = {
+    first_name: usuario.first_name,
+    last_name: usuario.last_name,
+    rol: usuario.rol,
+    is_active: usuario.is_active,
+  }
+  erroresEditar.value = {}
+  modalEditarAbierto.value = true
+}
+
+async function guardarEdicion() {
+  erroresEditar.value = {}
+  guardandoEdicion.value = true
+  try {
+    await api.patch(`/usuarios/${usuarioEditando.value.id}/`, formEditar.value)
+    modalEditarAbierto.value = false
+    await cargarUsuarios()
+  } catch (e) {
+    erroresEditar.value = mapearErroresCampo(e)
+  } finally {
+    guardandoEdicion.value = false
+  }
+}
+
 function formatearFecha(fechaIso) {
   return new Date(fechaIso).toLocaleDateString('es-CO', {
     year: 'numeric',
@@ -119,16 +152,17 @@ onMounted(cargarUsuarios)
             <th class="px-6 py-3">Usuario</th>
             <th class="px-6 py-3">Nombre</th>
             <th class="px-6 py-3">Rol</th>
+            <th class="px-6 py-3">Estado</th>
             <th class="px-6 py-3">Creado</th>
             <th class="px-6 py-3">Acciones</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           <tr v-if="cargando">
-            <td colspan="5" class="px-6 py-8 text-center text-ink-500">Cargando usuarios…</td>
+            <td colspan="6" class="px-6 py-8 text-center text-ink-500">Cargando usuarios…</td>
           </tr>
           <tr v-else-if="usuarios.length === 0">
-            <td colspan="5" class="px-6 py-8 text-center text-ink-500">
+            <td colspan="6" class="px-6 py-8 text-center text-ink-500">
               Aún no hay usuarios creados.
             </td>
           </tr>
@@ -140,8 +174,20 @@ onMounted(cargarUsuarios)
             <td class="px-6 py-3">
               <Badge :color="ROL_BADGE[usuario.rol]">{{ usuario.rol_display }}</Badge>
             </td>
-            <td class="px-6 py-3 text-ink-500">{{ formatearFecha(usuario.date_joined) }}</td>
             <td class="px-6 py-3">
+              <Badge :color="usuario.is_active ? 'blue' : 'gray'">
+                {{ usuario.is_active ? 'Activo' : 'Inactivo' }}
+              </Badge>
+            </td>
+            <td class="px-6 py-3 text-ink-500">{{ formatearFecha(usuario.date_joined) }}</td>
+            <td class="px-6 py-3 space-x-3">
+              <button
+                type="button"
+                class="font-semibold text-accent-blue hover:underline"
+                @click="abrirModalEditar(usuario)"
+              >
+                Editar
+              </button>
               <button
                 type="button"
                 class="font-semibold text-accent-blue hover:underline"
@@ -217,6 +263,53 @@ onMounted(cargarUsuarios)
           </BaseButton>
           <BaseButton type="submit" variant="primary" :loading="guardandoPassword">
             Guardar
+          </BaseButton>
+        </div>
+      </form>
+    </BaseModal>
+
+    <!-- HU-05 Editar usuario / HU-06 Asignar roles y permisos -->
+    <BaseModal
+      :open="modalEditarAbierto"
+      :title="`Editar usuario · ${usuarioEditando?.username ?? ''}`"
+      @close="modalEditarAbierto = false"
+    >
+      <form class="space-y-4" @submit.prevent="guardarEdicion">
+        <div class="grid grid-cols-2 gap-3">
+          <BaseInput
+            v-model="formEditar.first_name"
+            label="Nombre"
+            :error="erroresEditar.first_name"
+          />
+          <BaseInput
+            v-model="formEditar.last_name"
+            label="Apellido"
+            :error="erroresEditar.last_name"
+          />
+        </div>
+        <label class="block">
+          <span class="mb-1.5 block text-sm font-medium text-ink-900">Rol</span>
+          <select
+            v-model="formEditar.rol"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20"
+          >
+            <option value="admin">Administrador</option>
+            <option value="supervisor">Supervisor</option>
+            <option value="planta">Personal de Planta</option>
+          </select>
+          <span v-if="erroresEditar.rol" class="mt-1 block text-sm text-danger">{{ erroresEditar.rol }}</span>
+        </label>
+        <label class="flex items-center gap-2">
+          <input v-model="formEditar.is_active" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
+          <span class="text-sm font-medium text-ink-900">Usuario activo</span>
+        </label>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <BaseButton type="button" variant="secondary" @click="modalEditarAbierto = false">
+            Cancelar
+          </BaseButton>
+          <BaseButton type="submit" variant="primary" :loading="guardandoEdicion">
+            Guardar cambios
           </BaseButton>
         </div>
       </form>

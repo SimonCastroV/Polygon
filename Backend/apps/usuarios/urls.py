@@ -7,6 +7,11 @@ urlpatterns = [
     path('logout/', views.LogoutView.as_view(), name='logout'),
     path('usuarios/', views.UsuarioListCreateView.as_view(), name='usuarios-list-create'),
     path(
+        'usuarios/<int:pk>/',
+        views.UsuarioDetailUpdateView.as_view(),
+        name='usuarios-detail-update',
+    ),
+    path(
         'usuarios/<int:pk>/cambiar-password/',
         views.CambiarPasswordView.as_view(),
         name='usuarios-cambiar-password',
