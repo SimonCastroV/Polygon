@@ -1,34 +1,29 @@
-# Python
-__pycache__/
-*.py[cod]
-.venv/
+# Entorno virtual
 venv/
 env/
+*.venv/
 
-# Django
-*.sqlite3
-db.sqlite3
-media/
-staticfiles/
-
-# Environment variables
+# Variables de entorno
 .env
-.env.*
-!.env.example
 
-# Node / Vue
-node_modules/
-dist/
+# Bytecode de Python
+__pycache__/
+*.py[cod]
+*$py.class
 
-# IDE / OS
-.vscode/
+# Base de datos local (por si en algun momento cae a SQLite)
+db.sqlite3
+db.sqlite3-journal
+
+# Archivos estaticos y media generados por Django
+staticfiles/
+media/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
 .idea/
 .DS_Store
-
-# Tests / coverage
-.pytest_cache/
-.coverage
-htmlcov/
 
 # Logs
 *.log
