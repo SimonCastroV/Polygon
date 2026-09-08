@@ -43,12 +43,22 @@ async function cerrarSesion() {
         Usuarios
       </router-link>
       <router-link
+        v-if="auth.rol !== 'picky'"
         :to="{ name: 'admin-ordenes-produccion' }"
         class="shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-semibold"
         active-class="border-navy-900 text-navy-900"
         exact-active-class="border-navy-900 text-navy-900"
       >
         Órdenes de Producción
+      </router-link>
+      <router-link
+        v-if="auth.rol === 'picky'"
+        :to="{ name: 'picky-ordenes' }"
+        class="shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-semibold"
+        active-class="border-navy-900 text-navy-900"
+        exact-active-class="border-navy-900 text-navy-900"
+      >
+        Picky
       </router-link>
     </nav>
 

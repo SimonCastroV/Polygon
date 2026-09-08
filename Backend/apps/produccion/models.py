@@ -34,13 +34,19 @@ class OrdenProduccion(models.Model):
         NORMAL = 'normal', 'Proceso normal'
 
     class Estado(models.TextChoices):
-        PLANEACION = 'planeacion', 'Planeación'
-        PICKY = 'picky', 'Picky'
-        PESAJE = 'pesaje', 'Pesaje'
-        MEZCLA = 'mezcla', 'Mezcla'
-        EXTRUSION = 'extrusion', 'Extrusión'
-        CALIDAD = 'calidad', 'Calidad'
-        EMPAQUE = 'empaque', 'Empaque'
+        """
+        Una etapa por cada base del flujo, con el mismo nombre que la app y
+        el rol correspondiente (apps.produccion / rol 'produccion', etc.).
+        Por ahora solo está implementada la transición Producción → Picky.
+        """
+
+        PRODUCCION = 'produccion', 'En Producción'
+        PICKY = 'picky', 'En Picky'
+        PESAJE = 'pesaje', 'En Pesaje'
+        MEZCLA = 'mezcla', 'En Mezcla'
+        EXTRUSION = 'extrusion', 'En Extrusión'
+        CALIDAD = 'calidad', 'En Calidad'
+        EMPAQUE = 'empaque', 'En Empaque'
         FINALIZADA = 'finalizada', 'Finalizada'
         CANCELADA = 'cancelada', 'Cancelada'
 
@@ -67,8 +73,35 @@ class OrdenProduccion(models.Model):
     observaciones = models.TextField(blank=True)
 
     estado = models.CharField(
-        max_length=20, choices=Estado.choices, default=Estado.PLANEACION
+        max_length=20, choices=Estado.choices, default=Estado.PRODUCCION
     )
+
+    # --- Trazabilidad de la liberación Producción → Picky ---
+    # La fecha/hora la pone siempre el servidor (nunca el operario), para
+    # que sirva de base a los reportes del proceso. El detalle del cambio
+    # de estado (anterior → nuevo, quién y cuándo) queda además en
+    # HistorialOrdenProduccion.
+    fecha_envio_picky = models.DateTimeField(null=True, blank=True)
+    # Nombre de la persona que recibe en Picky: las cuentas de Polygon son
+    # estaciones (ej. 'picky'), no personas, así que el usuario autenticado
+    # no aporta un nombre propio. Se guardan los dos datos: el nombre que
+    # digita el operario y la cuenta desde la que se confirmó.
+    nombre_operario_picky = models.CharField(max_length=120, blank=True)
+    recibida_por_picky = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='ordenes_recibidas_picky',
+        null=True,
+        blank=True,
+    )
+    fecha_recepcion_picky = models.DateTimeField(null=True, blank=True)
+
+    # --- Liberación Picky → Pesaje ---
+    # Un solo sello de tiempo que marca a la vez la finalización del trabajo
+    # en Picky y el envío a Pesaje. Aquí termina el alcance actual: la OP
+    # queda En Pesaje esperando a que se construya esa base.
+    fecha_envio_pesaje = models.DateTimeField(null=True, blank=True)
+
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

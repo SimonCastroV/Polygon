@@ -3,11 +3,12 @@ from rest_framework.permissions import BasePermission
 
 class PuedeVerOP(BasePermission):
     """
-    Consulta de Órdenes de Producción: solo Producción, Supervisor y
-    Administrador. 'produccion' es el rol de la estación de Producción
-    (primer eslabón del flujo, antes de Picky); no incluye 'planta'
-    (Personal de Planta genérico, ej. Pesaje), que no debe ver esta
-    pantalla.
+    Consulta de Órdenes de Producción: Producción, Picky, Supervisor y
+    Administrador. Picky solo alcanza las OP que Producción ya liberó: ese
+    filtro se aplica en el queryset de las vistas (ver
+    apps.produccion.views), no aquí. Los demás roles de estación (Pesaje,
+    Mezcla, etc.) todavía no tienen acceso, se irán sumando cuando se
+    construya cada base.
     """
 
     message = 'No tiene permisos para consultar Órdenes de Producción.'
@@ -16,7 +17,7 @@ class PuedeVerOP(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and request.user.rol in ('admin', 'supervisor', 'produccion')
+            and request.user.rol in ('admin', 'supervisor', 'produccion', 'picky')
         )
 
 
@@ -32,4 +33,19 @@ class EsProduccion(BasePermission):
     def has_permission(self, request, view):
         return bool(
             request.user and request.user.is_authenticated and request.user.rol == 'produccion'
+        )
+
+
+class EsPicky(BasePermission):
+    """
+    Solo la estación de Picky (rol 'picky') registra la recepción de una
+    OP liberada por Producción. Picky no puede modificar ningún otro dato
+    de la orden (ver OrdenProduccionRecepcionPickySerializer).
+    """
+
+    message = 'Solo Picky puede registrar la recepción de la Orden de Producción.'
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated and request.user.rol == 'picky'
         )

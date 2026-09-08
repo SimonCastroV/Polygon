@@ -2,38 +2,72 @@ from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 
 from .models import HistorialOrdenProduccion, OrdenProduccion
-from .permissions import EsProduccion, PuedeVerOP
-from .serializers import OrdenProduccionIngresarSerializer, OrdenProduccionSerializer
+from .permissions import EsPicky, EsProduccion, PuedeVerOP
+from .serializers import (
+    OrdenProduccionEnviarPesajeSerializer,
+    OrdenProduccionEnviarPickySerializer,
+    OrdenProduccionIngresarSerializer,
+    OrdenProduccionRecepcionPickySerializer,
+    OrdenProduccionSerializer,
+)
 
 # Campos que se rastrean en HistorialOrdenProduccion cuando cambian al
-# "ingresar a la OP" (único dato editable desde la API, ver
-# OrdenProduccionIngresarSerializer).
+# "ingresar a la OP" (ver OrdenProduccionIngresarSerializer).
 CAMPOS_AUDITADOS = ['clasificacion', 'observaciones']
+
+
+def registrar_historial(orden, usuario, campo, valor_anterior, valor_nuevo):
+    """Deja evidencia de un cambio en HistorialOrdenProduccion (trazabilidad)."""
+    HistorialOrdenProduccion.objects.create(
+        orden=orden,
+        modificado_por=usuario,
+        campo=campo,
+        valor_anterior=str(valor_anterior or ''),
+        valor_nuevo=str(valor_nuevo or ''),
+    )
+
+
+def ordenes_visibles_para(usuario):
+    """
+    Picky solo ve las OP que Producción ya liberó — incluidas las que él
+    mismo ya pasó a Pesaje, para poder consultarlas después (filtro "Ya
+    liberado"). Se filtra por fecha_envio_picky y no por estado, para que
+    una OP siga siendo visible aunque avance en el flujo.
+
+    Producción, Supervisor y Administrador ven todas (Producción necesita
+    ver tanto las pendientes por enviar como las que ya mandó).
+    """
+    queryset = OrdenProduccion.objects.prefetch_related('materiales').all()
+    if usuario.rol == 'picky':
+        return queryset.filter(fecha_envio_picky__isnull=False)
+    return queryset
 
 
 class OrdenProduccionListView(generics.ListAPIView):
     """
-    GET /api/produccion/ordenes/ -> listado de OP, accesible a Producción,
-    Supervisor y Administrador. Encabezado y materiales son de solo
-    lectura: la OP llega ya hecha de Sumicolor (por ahora, cargada por
-    Django admin) y no se crea/edita desde Polygon.
+    GET /api/produccion/ordenes/ -> listado de OP. El encabezado y los
+    materiales son de solo lectura: la OP llega ya hecha de Sumicolor (por
+    ahora, cargada por Django admin) y no se crea/edita desde Polygon.
     """
 
-    queryset = OrdenProduccion.objects.prefetch_related('materiales').all()
     serializer_class = OrdenProduccionSerializer
     permission_classes = [IsAuthenticated, PuedeVerOP]
+
+    def get_queryset(self):
+        return ordenes_visibles_para(self.request.user)
 
 
 class OrdenProduccionDetailView(generics.RetrieveAPIView):
     """
     GET /api/produccion/ordenes/<pk>/ -> detalle completo de la OP
-    (encabezado + tabla de materiales), accesible a Producción, Supervisor
-    y Administrador.
+    (encabezado + tabla de materiales + trazabilidad de Picky).
     """
 
-    queryset = OrdenProduccion.objects.prefetch_related('materiales').all()
     serializer_class = OrdenProduccionSerializer
     permission_classes = [IsAuthenticated, PuedeVerOP]
+
+    def get_queryset(self):
+        return ordenes_visibles_para(self.request.user)
 
 
 class OrdenProduccionIngresarView(generics.UpdateAPIView):
@@ -59,13 +93,91 @@ class OrdenProduccionIngresarView(generics.UpdateAPIView):
             valor_anterior = valores_anteriores[campo]
             valor_nuevo = getattr(orden_actualizada, campo)
             if valor_anterior != valor_nuevo:
-                HistorialOrdenProduccion.objects.create(
-                    orden=orden_actualizada,
-                    modificado_por=self.request.user,
-                    campo=campo,
-                    valor_anterior=str(valor_anterior),
-                    valor_nuevo=str(valor_nuevo),
+                registrar_historial(
+                    orden_actualizada, self.request.user, campo, valor_anterior, valor_nuevo
                 )
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        response.data = OrdenProduccionSerializer(self.get_object()).data
+        return response
+
+
+class OrdenProduccionEnviarPickyView(generics.UpdateAPIView):
+    """
+    PATCH /api/produccion/ordenes/<pk>/enviar-picky/ -> "Mandar orden a
+    Picky": solo Producción libera la OP. Cambia el estado En Producción →
+    En Picky, sella la fecha/hora del servidor y deja la transición en
+    HistorialOrdenProduccion. Una OP que ya salió de Producción no puede
+    volver a enviarse (ver OrdenProduccionEnviarPickySerializer).
+    """
+
+    http_method_names = ['patch']
+    queryset = OrdenProduccion.objects.all()
+    serializer_class = OrdenProduccionEnviarPickySerializer
+    permission_classes = [IsAuthenticated, EsProduccion]
+
+    def perform_update(self, serializer):
+        estado_anterior = self.get_object().estado
+        orden = serializer.save()
+        registrar_historial(
+            orden, self.request.user, 'estado', estado_anterior, orden.estado
+        )
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        response.data = OrdenProduccionSerializer(self.get_object()).data
+        return response
+
+
+class OrdenProduccionRecepcionPickyView(generics.UpdateAPIView):
+    """
+    PATCH /api/produccion/ordenes/<pk>/recepcion-picky/ -> Picky confirma
+    que recibió la OP: registra el nombre del operario y el servidor sella
+    la fecha/hora de recepción y la cuenta que confirmó. Solo aplica a OP
+    que estén En Picky.
+    """
+
+    http_method_names = ['patch']
+    queryset = OrdenProduccion.objects.all()
+    serializer_class = OrdenProduccionRecepcionPickySerializer
+    permission_classes = [IsAuthenticated, EsPicky]
+
+    def perform_update(self, serializer):
+        nombre_anterior = self.get_object().nombre_operario_picky
+        orden = serializer.save()
+        registrar_historial(
+            orden,
+            self.request.user,
+            'nombre_operario_picky',
+            nombre_anterior,
+            orden.nombre_operario_picky,
+        )
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        response.data = OrdenProduccionSerializer(self.get_object()).data
+        return response
+
+
+class OrdenProduccionEnviarPesajeView(generics.UpdateAPIView):
+    """
+    PATCH /api/produccion/ordenes/<pk>/enviar-pesaje/ -> "Enviar a Pesaje":
+    Picky termina y libera la OP. Cambia el estado En Picky → En Pesaje y
+    sella la fecha/hora del servidor (finalización en Picky = envío a
+    Pesaje). La base de Pesaje todavía no está construida: la OP queda ahí
+    esperando esa etapa.
+    """
+
+    http_method_names = ['patch']
+    queryset = OrdenProduccion.objects.all()
+    serializer_class = OrdenProduccionEnviarPesajeSerializer
+    permission_classes = [IsAuthenticated, EsPicky]
+
+    def perform_update(self, serializer):
+        estado_anterior = self.get_object().estado
+        orden = serializer.save()
+        registrar_historial(orden, self.request.user, 'estado', estado_anterior, orden.estado)
 
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
