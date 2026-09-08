@@ -16,15 +16,32 @@ const routes = [
   {
     path: '/admin',
     component: () => import('../layouts/AdminLayout.vue'),
-    // Cada estación entra con su propio rol: 'produccion' consulta y libera
-    // las OP, 'picky' solo ve las que Producción ya liberó (ver PuedeVerOP
-    // y ordenes_visibles_para en el backend). Las demás estaciones (Pesaje,
-    // Mezcla, etc.) se irán sumando cuando se construya cada base.
+    // Cada estación y Supervisor de Pesaje tienen rutas y colas propias.
+    // El backend aplica también permisos y filtros por estado.
     meta: {
       requiresAuth: true,
-      rolesPermitidos: ['admin', 'supervisor', 'produccion', 'picky', 'pesaje'],
+      rolesPermitidos: [
+        'admin',
+        'supervisor',
+        'produccion',
+        'picky',
+        'pesaje',
+        'supervisor_pesaje',
+      ],
     },
     children: [
+      {
+        path: 'supervision-pesaje/ordenes',
+        name: 'supervision-pesaje-ordenes',
+        component: () => import('../views/pesaje/OrdenesPesaje.vue'),
+        meta: { rolesPermitidos: ['supervisor_pesaje'] },
+      },
+      {
+        path: 'supervision-pesaje/ordenes/:id',
+        name: 'supervision-pesaje-detalle',
+        component: () => import('../views/pesaje/OrdenPesajeDetalle.vue'),
+        meta: { rolesPermitidos: ['supervisor_pesaje'] },
+      },
       {
         path: '',
         redirect: () => {
@@ -95,6 +112,7 @@ export function destinoSegunRol(rol) {
   if (rol === 'admin') return { name: 'admin-usuarios' }
   if (rol === 'supervisor' || rol === 'produccion') return { name: 'admin-ordenes-produccion' }
   if (rol === 'picky') return { name: 'picky-ordenes' }
+  if (rol === 'supervisor_pesaje') return { name: 'supervision-pesaje-ordenes' }
   if (rol === 'pesaje') return { name: 'pesaje-ordenes' }
 
   return { name: 'pendiente' }

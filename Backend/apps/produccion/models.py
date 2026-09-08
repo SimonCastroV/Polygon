@@ -33,16 +33,24 @@ class OrdenProduccion(models.Model):
         PELIGROSO = 'peligroso', 'Producto peligroso'
         NORMAL = 'normal', 'Proceso normal'
 
+    class GrupoCriticoPesaje(models.TextChoices):
+        SIN_CLASIFICAR = '', 'Sin clasificar'
+        NO_CRITICO = 'no_critico', 'No crítico'
+        BLANCOS = 'blancos', 'Blancos'
+        ADITIVOS_RETARDANTES = 'aditivos_retardantes', 'Aditivos / Retardantes a la Llama'
+        HOJAS_AZULES = 'hojas_azules', 'Hojas azules'
+
     class Estado(models.TextChoices):
         """
         Una etapa por cada base del flujo, con el mismo nombre que la app y
         el rol correspondiente (apps.produccion / rol 'produccion', etc.).
-        Por ahora solo está implementada la transición Producción → Picky.
+        Transiciones operativas hasta Mezcla, con revisión explícita de Pesaje.
         """
 
         PRODUCCION = 'produccion', 'En Producción'
         PICKY = 'picky', 'En Picky'
         PESAJE = 'pesaje', 'En Pesaje'
+        SUPERVISION_PESAJE = 'supervision_pesaje', 'En supervisión de Pesaje'
         MEZCLA = 'mezcla', 'En Mezcla'
         EXTRUSION = 'extrusion', 'En Extrusión'
         CALIDAD = 'calidad', 'En Calidad'
@@ -53,6 +61,16 @@ class OrdenProduccion(models.Model):
     # --- Identificación (Polygon vs. Sumicolor) ---
     numero_orden = models.CharField(max_length=20, unique=True, editable=False)
     codigo_producto = models.CharField('código', max_length=20)
+    # Dato explícito del producto de esta OP: no se infiere de nombres ni materiales.
+    # Carga por admin hasta disponer del catálogo de productos de Sumicolor.
+    grupo_critico_pesaje = models.CharField(
+        max_length=20,
+        choices=GrupoCriticoPesaje.choices,
+        default='',
+        blank=True,
+        help_text='Clasificar según el código de producto y su ficha técnica. '
+        'Obligatorio antes de enviar Pesaje a supervisión.',
+    )
 
     # --- Encabezado (Sumicolor: vista CantidadesLotes) ---
     referencia = models.CharField(max_length=120)
@@ -72,9 +90,7 @@ class OrdenProduccion(models.Model):
     )
     observaciones = models.TextField(blank=True)
 
-    estado = models.CharField(
-        max_length=20, choices=Estado.choices, default=Estado.PRODUCCION
-    )
+    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PRODUCCION)
 
     # --- Trazabilidad de la liberación Producción → Picky ---
     # La fecha/hora la pone siempre el servidor (nunca el operario), para
@@ -98,8 +114,8 @@ class OrdenProduccion(models.Model):
 
     # --- Liberación Picky → Pesaje ---
     # Un solo sello de tiempo que marca a la vez la finalización del trabajo
-    # en Picky y el envío a Pesaje. Aquí termina el alcance actual: la OP
-    # queda En Pesaje esperando a que se construya esa base.
+    # en Picky y el envío a Pesaje. El formulario y la revisión se guardan
+    # en apps.pesaje; el estado de la OP sigue siendo la fuente del flujo.
     fecha_envio_pesaje = models.DateTimeField(null=True, blank=True)
 
     creado_por = models.ForeignKey(
@@ -126,6 +142,14 @@ class OrdenProduccion(models.Model):
             self.numero_orden = self._generar_numero_orden()
         super().save(*args, **kwargs)
 
+    @property
+    def es_critico_pesaje(self):
+        return self.grupo_critico_pesaje in (
+            self.GrupoCriticoPesaje.BLANCOS,
+            self.GrupoCriticoPesaje.ADITIVOS_RETARDANTES,
+            self.GrupoCriticoPesaje.HOJAS_AZULES,
+        )
+
     @staticmethod
     def _generar_numero_orden():
         """
@@ -149,9 +173,7 @@ class MaterialOrden(models.Model):
     sin una columna simple confirmada en el diccionario de datos.
     """
 
-    orden = models.ForeignKey(
-        OrdenProduccion, on_delete=models.CASCADE, related_name='materiales'
-    )
+    orden = models.ForeignKey(OrdenProduccion, on_delete=models.CASCADE, related_name='materiales')
     codigo = models.CharField(max_length=20)
     descripcion = models.CharField(max_length=120)
     porcentaje = models.FloatField()
@@ -169,15 +191,14 @@ class MaterialOrden(models.Model):
 class HistorialOrdenProduccion(models.Model):
     """Historial de cambios de una OP (HU-11: fecha, hora y usuario que editó)."""
 
-    orden = models.ForeignKey(
-        OrdenProduccion, on_delete=models.CASCADE, related_name='historial'
-    )
+    orden = models.ForeignKey(OrdenProduccion, on_delete=models.CASCADE, related_name='historial')
     modificado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True
     )
     campo = models.CharField(max_length=50)
     valor_anterior = models.CharField(max_length=255, blank=True)
     valor_nuevo = models.CharField(max_length=255, blank=True)
+    detalle = models.TextField(blank=True)
     fecha = models.DateTimeField(auto_now_add=True)
 
     class Meta:

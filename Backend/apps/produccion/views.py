@@ -16,7 +16,7 @@ from .serializers import (
 CAMPOS_AUDITADOS = ['clasificacion', 'observaciones']
 
 
-def registrar_historial(orden, usuario, campo, valor_anterior, valor_nuevo):
+def registrar_historial(orden, usuario, campo, valor_anterior, valor_nuevo, detalle=''):
     """Deja evidencia de un cambio en HistorialOrdenProduccion (trazabilidad)."""
     HistorialOrdenProduccion.objects.create(
         orden=orden,
@@ -24,6 +24,7 @@ def registrar_historial(orden, usuario, campo, valor_anterior, valor_nuevo):
         campo=campo,
         valor_anterior=str(valor_anterior or ''),
         valor_nuevo=str(valor_nuevo or ''),
+        detalle=detalle,
     )
 
 
@@ -35,15 +36,25 @@ def ordenes_visibles_para(usuario):
       avanzaron a Pesaje. (Consulta el filtro "Ya liberado" para verlas)
     - Pesaje ve únicamente las OP pendientes en su etapa, es decir,
       aquellas cuyo estado actual es 'pesaje'.
+    - Supervisor de Pesaje ve únicamente las pendientes de su revisión.
     - Producción, Supervisor y Administrador pueden consultar todas.
     """
-    queryset = OrdenProduccion.objects.prefetch_related('materiales').all()
+    queryset = (
+        OrdenProduccion.objects.select_related(
+            'creado_por', 'recibida_por_picky', 'pesaje__registrado_por', 'pesaje__supervisor'
+        )
+        .prefetch_related('materiales', 'pesaje__pesos', 'historial__modificado_por')
+        .all()
+    )
 
     if usuario.rol == 'picky':
         return queryset.filter(fecha_envio_picky__isnull=False)
 
     if usuario.rol == 'pesaje':
         return queryset.filter(estado=OrdenProduccion.Estado.PESAJE)
+
+    if usuario.rol == 'supervisor_pesaje':
+        return queryset.filter(estado=OrdenProduccion.Estado.SUPERVISION_PESAJE)
 
     return queryset
 
@@ -125,9 +136,7 @@ class OrdenProduccionEnviarPickyView(generics.UpdateAPIView):
     def perform_update(self, serializer):
         estado_anterior = self.get_object().estado
         orden = serializer.save()
-        registrar_historial(
-            orden, self.request.user, 'estado', estado_anterior, orden.estado
-        )
+        registrar_historial(orden, self.request.user, 'estado', estado_anterior, orden.estado)
 
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
@@ -170,8 +179,8 @@ class OrdenProduccionEnviarPesajeView(generics.UpdateAPIView):
     PATCH /api/produccion/ordenes/<pk>/enviar-pesaje/ -> "Enviar a Pesaje":
     Picky termina y libera la OP. Cambia el estado En Picky → En Pesaje y
     sella la fecha/hora del servidor (finalización en Picky = envío a
-    Pesaje). La base de Pesaje todavía no está construida: la OP queda ahí
-    esperando esa etapa.
+    Pesaje). Desde ahí se registra el formulario en apps.pesaje y se envía
+    a Supervisor de Pesaje antes de continuar a Mezcla.
     """
 
     http_method_names = ['patch']

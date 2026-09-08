@@ -1,6 +1,8 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.pesaje.serializers import RegistroPesajeSerializer
+
 from .models import HistorialOrdenProduccion, MaterialOrden, OrdenProduccion
 
 
@@ -18,6 +20,7 @@ class HistorialOrdenProduccionSerializer(serializers.ModelSerializer):
             'valor_nuevo',
             'modificado_por_username',
             'fecha',
+            'detalle',
         ]
 
 
@@ -39,6 +42,10 @@ class OrdenProduccionSerializer(serializers.ModelSerializer):
     únicamente los expone en modo lectura.
     """
 
+    grupo_critico_pesaje_display = serializers.CharField(
+        source='get_grupo_critico_pesaje_display', read_only=True
+    )
+    es_critico_pesaje = serializers.BooleanField(read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
     clasificacion_display = serializers.CharField(
         source='get_clasificacion_display', read_only=True
@@ -48,6 +55,8 @@ class OrdenProduccionSerializer(serializers.ModelSerializer):
         source='recibida_por_picky.username', read_only=True, default=None
     )
     materiales = MaterialOrdenSerializer(many=True, read_only=True)
+    pesaje = RegistroPesajeSerializer(read_only=True, default=None)
+    historial = HistorialOrdenProduccionSerializer(many=True, read_only=True)
 
     class Meta:
         model = OrdenProduccion
@@ -55,6 +64,9 @@ class OrdenProduccionSerializer(serializers.ModelSerializer):
             'id',
             'numero_orden',
             'codigo_producto',
+            'grupo_critico_pesaje',
+            'grupo_critico_pesaje_display',
+            'es_critico_pesaje',
             'referencia',
             'cantidad',
             'unidad',
@@ -66,6 +78,8 @@ class OrdenProduccionSerializer(serializers.ModelSerializer):
             'vencimiento_pedido',
             'fecha_hora_lote',
             'materiales',
+            'pesaje',
+            'historial',
             'clasificacion',
             'clasificacion_display',
             'observaciones',
@@ -152,8 +166,7 @@ class OrdenProduccionRecepcionPickySerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if self.instance.estado != OrdenProduccion.Estado.PICKY:
             raise serializers.ValidationError(
-                'Solo se puede registrar la recepción de una Orden de Producción que esté '
-                'En Picky.'
+                'Solo se puede registrar la recepción de una Orden de Producción que esté En Picky.'
             )
         return attrs
 

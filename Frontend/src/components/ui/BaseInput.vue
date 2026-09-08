@@ -12,6 +12,8 @@ defineProps({
     type: String,
     default: 'text',
   },
+  min: { type: String, default: undefined },
+  step: { type: String, default: undefined },
   placeholder: {
     type: String,
     default: '',
@@ -34,6 +36,8 @@ defineEmits(['update:modelValue'])
     <span v-if="label" class="mb-1.5 block text-sm font-medium text-ink-900">{{ label }}</span>
     <input
       :type="type"
+      :min="min"
+      :step="step"
       :value="modelValue"
       :placeholder="placeholder"
       :required="required"
