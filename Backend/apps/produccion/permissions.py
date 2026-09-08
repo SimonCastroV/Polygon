@@ -17,7 +17,7 @@ class PuedeVerOP(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and request.user.rol in ('admin', 'supervisor', 'produccion', 'picky')
+            and request.user.rol in ('admin', 'supervisor', 'produccion', 'picky', 'pesaje')
         )
 
 
