@@ -29,17 +29,22 @@ def registrar_historial(orden, usuario, campo, valor_anterior, valor_nuevo):
 
 def ordenes_visibles_para(usuario):
     """
-    Picky solo ve las OP que Producción ya liberó — incluidas las que él
-    mismo ya pasó a Pesaje, para poder consultarlas después (filtro "Ya
-    liberado"). Se filtra por fecha_envio_picky y no por estado, para que
-    una OP siga siendo visible aunque avance en el flujo.
+    Define qué Órdenes de Producción puede consultar cada estación.
 
-    Producción, Supervisor y Administrador ven todas (Producción necesita
-    ver tanto las pendientes por enviar como las que ya mandó).
+    - Picky ve las OP que Producción ya liberó, incluso si después
+      avanzaron a Pesaje. (Consulta el filtro "Ya liberado" para verlas)
+    - Pesaje ve únicamente las OP pendientes en su etapa, es decir,
+      aquellas cuyo estado actual es 'pesaje'.
+    - Producción, Supervisor y Administrador pueden consultar todas.
     """
     queryset = OrdenProduccion.objects.prefetch_related('materiales').all()
+
     if usuario.rol == 'picky':
         return queryset.filter(fecha_envio_picky__isnull=False)
+
+    if usuario.rol == 'pesaje':
+        return queryset.filter(estado=OrdenProduccion.Estado.PESAJE)
+
     return queryset
 
 

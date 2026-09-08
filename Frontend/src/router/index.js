@@ -22,7 +22,7 @@ const routes = [
     // Mezcla, etc.) se irán sumando cuando se construya cada base.
     meta: {
       requiresAuth: true,
-      rolesPermitidos: ['admin', 'supervisor', 'produccion', 'picky'],
+      rolesPermitidos: ['admin', 'supervisor', 'produccion', 'picky', 'pesaje'],
     },
     children: [
       {
@@ -62,6 +62,18 @@ const routes = [
         component: () => import('../views/picky/OrdenPickyDetalle.vue'),
         meta: { rolesPermitidos: ['picky'] },
       },
+      {
+        path: 'pesaje/ordenes',
+        name: 'pesaje-ordenes',
+        component: () => import('../views/pesaje/OrdenesPesaje.vue'),
+        meta: { rolesPermitidos: ['pesaje'] },
+      },
+      {
+        path: 'pesaje/ordenes/:id',
+        name: 'pesaje-orden-detalle',
+        component: () => import('../views/pesaje/OrdenPesajeDetalle.vue'),
+        meta: { rolesPermitidos: ['pesaje'] },
+      },
     ],
   },
   {
@@ -83,6 +95,8 @@ export function destinoSegunRol(rol) {
   if (rol === 'admin') return { name: 'admin-usuarios' }
   if (rol === 'supervisor' || rol === 'produccion') return { name: 'admin-ordenes-produccion' }
   if (rol === 'picky') return { name: 'picky-ordenes' }
+  if (rol === 'pesaje') return { name: 'pesaje-ordenes' }
+
   return { name: 'pendiente' }
 }
 
