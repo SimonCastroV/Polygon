@@ -12,14 +12,9 @@ class CustomUser(AbstractUser):
     class Rol(models.TextChoices):
         ADMIN = 'admin', 'Administrador'
         SUPERVISOR = 'supervisor', 'Supervisor'
-        # Una estación por cada base del flujo de producción (Producción →
-        # Picky → Pesaje → Mezcla → Extrusión → Calidad → Empaque). Por
-        # ahora PRODUCCION es la única con permisos/pantalla propia (ver
-        # apps.produccion.permissions); PICKY..EMPAQUE son solo el
-        # bosquejo del rol, sin permisos ni vistas todavía — se conectan
-        # cuando se construya cada base. PLANTA sigue siendo el rol
-        # genérico por defecto mientras una cuenta no se asigne a su
-        # estación específica.
+        SUPERVISOR_PESAJE = 'supervisor_pesaje', 'Supervisor de Pesaje'
+        # Una cuenta por estación. El supervisor genérico conserva su consulta;
+        # supervisor_pesaje es el único rol que revisa y libera Pesaje a Mezcla.
         PRODUCCION = 'produccion', 'Producción'
         PICKY = 'picky', 'Picky'
         PESAJE = 'pesaje', 'Pesaje'

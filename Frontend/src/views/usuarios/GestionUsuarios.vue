@@ -9,6 +9,7 @@ import Badge from '../../components/ui/Badge.vue'
 const ROL_BADGE = {
   admin: 'navy',
   supervisor: 'blue',
+  supervisor_pesaje: 'blue',
   produccion: 'amber',
   picky: 'gray',
   pesaje: 'gray',
@@ -241,6 +242,7 @@ onMounted(cargarUsuarios)
           >
             <option value="admin">Administrador</option>
             <option value="supervisor">Supervisor</option>
+            <option value="supervisor_pesaje">Supervisor de Pesaje</option>
             <option value="produccion">Producción</option>
             <option value="picky">Picky</option>
             <option value="pesaje">Pesaje</option>
@@ -261,7 +263,12 @@ onMounted(cargarUsuarios)
           >
             Cancelar
           </BaseButton>
-          <BaseButton type="submit" variant="primary" class="w-full sm:w-auto" :loading="guardandoUsuario">
+          <BaseButton
+            type="submit"
+            variant="primary"
+            class="w-full sm:w-auto"
+            :loading="guardandoUsuario"
+          >
             Crear usuario
           </BaseButton>
         </div>
@@ -290,7 +297,12 @@ onMounted(cargarUsuarios)
           >
             Cancelar
           </BaseButton>
-          <BaseButton type="submit" variant="primary" class="w-full sm:w-auto" :loading="guardandoPassword">
+          <BaseButton
+            type="submit"
+            variant="primary"
+            class="w-full sm:w-auto"
+            :loading="guardandoPassword"
+          >
             Guardar
           </BaseButton>
         </div>
@@ -315,6 +327,7 @@ onMounted(cargarUsuarios)
           >
             <option value="admin">Administrador</option>
             <option value="supervisor">Supervisor</option>
+            <option value="supervisor_pesaje">Supervisor de Pesaje</option>
             <option value="produccion">Producción</option>
             <option value="picky">Picky</option>
             <option value="pesaje">Pesaje</option>
@@ -324,10 +337,16 @@ onMounted(cargarUsuarios)
             <option value="empaque">Empaque</option>
             <option value="planta">Personal de Planta</option>
           </select>
-          <span v-if="erroresEditar.rol" class="mt-1 block text-sm text-danger">{{ erroresEditar.rol }}</span>
+          <span v-if="erroresEditar.rol" class="mt-1 block text-sm text-danger">{{
+            erroresEditar.rol
+          }}</span>
         </label>
         <label class="flex items-center gap-2">
-          <input v-model="formEditar.is_active" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
+          <input
+            v-model="formEditar.is_active"
+            type="checkbox"
+            class="h-4 w-4 rounded border-slate-300"
+          />
           <span class="text-sm font-medium text-ink-900">Usuario activo</span>
         </label>
 
@@ -340,7 +359,12 @@ onMounted(cargarUsuarios)
           >
             Cancelar
           </BaseButton>
-          <BaseButton type="submit" variant="primary" class="w-full sm:w-auto" :loading="guardandoEdicion">
+          <BaseButton
+            type="submit"
+            variant="primary"
+            class="w-full sm:w-auto"
+            :loading="guardandoEdicion"
+          >
             Guardar cambios
           </BaseButton>
         </div>

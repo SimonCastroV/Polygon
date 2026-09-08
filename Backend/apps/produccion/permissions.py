@@ -6,9 +6,9 @@ class PuedeVerOP(BasePermission):
     Consulta de Órdenes de Producción: Producción, Picky, Supervisor y
     Administrador. Picky solo alcanza las OP que Producción ya liberó: ese
     filtro se aplica en el queryset de las vistas (ver
-    apps.produccion.views), no aquí. Los demás roles de estación (Pesaje,
-    Mezcla, etc.) todavía no tienen acceso, se irán sumando cuando se
-    construya cada base.
+    apps.produccion.views), no aquí. Pesaje y su supervisor tienen acceso
+    exclusivamente a sus respectivas colas. Los demás roles de estación
+    se incorporarán cuando se construya cada base.
     """
 
     message = 'No tiene permisos para consultar Órdenes de Producción.'
@@ -17,7 +17,8 @@ class PuedeVerOP(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and request.user.rol in ('admin', 'supervisor', 'produccion', 'picky', 'pesaje')
+            and request.user.rol
+            in ('admin', 'supervisor', 'produccion', 'picky', 'pesaje', 'supervisor_pesaje')
         )
 
 
@@ -46,6 +47,4 @@ class EsPicky(BasePermission):
     message = 'Solo Picky puede registrar la recepción de la Orden de Producción.'
 
     def has_permission(self, request, view):
-        return bool(
-            request.user and request.user.is_authenticated and request.user.rol == 'picky'
-        )
+        return bool(request.user and request.user.is_authenticated and request.user.rol == 'picky')

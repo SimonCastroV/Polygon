@@ -28,6 +28,10 @@ defineProps({
         <dd class="font-medium text-ink-900">{{ orden.referencia }}</dd>
       </div>
       <div>
+        <dt class="text-ink-500">Grupo de producto para Pesaje</dt>
+        <dd class="font-medium text-ink-900">{{ orden.grupo_critico_pesaje_display || 'Sin clasificar' }}</dd>
+      </div>
+      <div>
         <dt class="text-ink-500">Cantidad</dt>
         <dd class="font-medium text-ink-900">{{ orden.cantidad }} {{ orden.unidad }}</dd>
       </div>

@@ -1,8 +1,9 @@
-from django.urls import path
+from django.urls import include, path
 
 from . import views
 
 urlpatterns = [
+    path('ordenes/<int:pk>/pesaje/', include('apps.pesaje.urls')),
     path(
         'ordenes/',
         views.OrdenProduccionListView.as_view(),

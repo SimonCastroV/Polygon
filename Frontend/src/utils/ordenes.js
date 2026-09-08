@@ -5,6 +5,7 @@ export const ESTADO_BADGE = {
   produccion: 'blue',
   picky: 'navy',
   pesaje: 'navy',
+  supervision_pesaje: 'amber',
   mezcla: 'navy',
   extrusion: 'navy',
   calidad: 'navy',
