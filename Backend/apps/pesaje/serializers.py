@@ -77,15 +77,22 @@ class RegistroPesajeSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         orden = self.context['orden']
-        if not orden.es_critico_pesaje:
-            # No aceptar respuestas ocultas ni borrar un registro anterior al reclasificar.
-            campos = [campo for campo, _ in VERIFICACIONES_CRITICAS] + ['critico_observaciones']
-            if any(attrs.get(campo) not in (None, '') for campo in campos):
-                raise serializers.ValidationError(
-                    {'detail': 'Las condiciones críticas no aplican a esta OP.'}
-                )
-            for campo in campos:
-                attrs.pop(campo, None)
+        # Cada OP responde un solo formulario: el de condiciones críticas o el
+        # estándar. Las respuestas del otro no se aceptan (no se muestran, así
+        # que llegarían de un cliente desactualizado) ni se guardan, para no
+        # dejar datos que nadie revisó.
+        if orden.es_critico_pesaje:
+            campos_ajenos = [campo for campo, _ in VERIFICACIONES] + ['observaciones']
+            mensaje = 'Un producto crítico responde solo las condiciones críticas.'
+        else:
+            campos_ajenos = [campo for campo, _ in VERIFICACIONES_CRITICAS] + [
+                'critico_observaciones'
+            ]
+            mensaje = 'Las condiciones críticas no aplican a esta OP.'
+        if any(attrs.get(campo) not in (None, '') for campo in campos_ajenos):
+            raise serializers.ValidationError({'detail': mensaje})
+        for campo in campos_ajenos:
+            attrs.pop(campo, None)
         materiales = set(orden.materiales.values_list('id', flat=True))
         pesos = attrs.get('pesos')
         if pesos is not None:
