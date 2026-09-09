@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue'
 import api from '../../services/api'
 import { useAuthStore } from '../../store/auth'
 import Badge from '../../components/ui/Badge.vue'
-import BaseButton from '../../components/ui/BaseButton.vue'
 import {
   CLASIFICACION_BADGE,
   ESTADOS_CERRADOS,
@@ -29,8 +28,6 @@ const filtro = ref(auth.rol === 'produccion' ? 'pendientes' : 'todas')
 
 const ordenes = ref([])
 const cargando = ref(true)
-const enviandoId = ref(null)
-const errorEnvio = ref('')
 
 const ordenesActivas = computed(() =>
   ordenes.value.filter((orden) => !ESTADOS_CERRADOS.includes(orden.estado)),
@@ -56,31 +53,11 @@ function contar(valorFiltro) {
   return ordenesActivas.value.length
 }
 
-function puedeEnviarAPicky(orden) {
-  return esProduccion.value && orden.estado === 'produccion'
-}
-
 async function cargarOrdenes() {
   cargando.value = true
   const { data } = await api.get('/produccion/ordenes/')
   ordenes.value = data
   cargando.value = false
-}
-
-async function mandarAPicky(orden) {
-  errorEnvio.value = ''
-  enviandoId.value = orden.id
-  try {
-    await api.patch(`/produccion/ordenes/${orden.id}/enviar-picky/`)
-    await cargarOrdenes()
-  } catch (e) {
-    const detalle = e.response?.data?.non_field_errors
-    errorEnvio.value = Array.isArray(detalle)
-      ? detalle[0]
-      : 'No se pudo mandar la orden a Picky.'
-  } finally {
-    enviandoId.value = null
-  }
 }
 
 onMounted(cargarOrdenes)
@@ -109,8 +86,6 @@ onMounted(cargarOrdenes)
         {{ opcion.label }} ({{ contar(opcion.value) }})
       </button>
     </div>
-
-    <p v-if="errorEnvio" class="mb-4 text-sm font-medium text-danger">{{ errorEnvio }}</p>
 
     <p v-if="cargando" class="py-8 text-center text-sm text-ink-500">Cargando órdenes…</p>
     <p v-else-if="ordenesFiltradas.length === 0" class="py-8 text-center text-sm text-ink-500">
@@ -155,16 +130,9 @@ onMounted(cargarOrdenes)
           </Badge>
         </div>
 
+        <!-- La OP se libera a Picky desde su detalle, no desde la card: así el
+             operario ve la orden completa antes de mandarla. -->
         <div class="mt-auto flex flex-col gap-2 pt-1">
-          <BaseButton
-            v-if="puedeEnviarAPicky(orden)"
-            variant="primary"
-            class="w-full"
-            :loading="enviandoId === orden.id"
-            @click="mandarAPicky(orden)"
-          >
-            Mandar orden a Picky
-          </BaseButton>
           <router-link
             :to="{ name: 'admin-orden-detalle', params: { id: orden.id } }"
             class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-ink-900 shadow-sm transition-colors hover:bg-surface-alt focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy-900"

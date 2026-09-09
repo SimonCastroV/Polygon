@@ -33,14 +33,21 @@ def cambiar_estado(orden, usuario, estado, detalle):
 
 def detalle_registro(orden, registro):
     detalle = f'Operario: {registro.nombre_operario}'
-    if orden.es_critico_pesaje:
+    respuestas_criticas = [getattr(registro, campo) for campo, _ in VERIFICACIONES_CRITICAS]
+    # Antes de que el operario conteste algo, todas las respuestas están en None
+    # (p. ej. justo al "Confirmar recibido"): mostrar ahí la lista completa en
+    # "Pendiente" no aporta nada y ensucia la trazabilidad. Solo se agrega este
+    # detalle cuando ya hay una respuesta real que registrar.
+    if orden.es_critico_pesaje and (
+        any(valor is not None for valor in respuestas_criticas) or registro.critico_observaciones
+    ):
         # Instantánea legible en el historial existente: conserva respuestas previas
         # aunque se corrijan en una devolución y se vuelvan a enviar.
         respuestas = {True: 'Cumple', False: 'No cumple', None: 'Pendiente'}
         lineas = [f'Producto crítico: {orden.get_grupo_critico_pesaje_display()}']
         lineas.extend(
-            f'{label} {respuestas[getattr(registro, campo)]}'
-            for campo, label in VERIFICACIONES_CRITICAS
+            f'{label} {respuestas[valor]}'
+            for (campo, label), valor in zip(VERIFICACIONES_CRITICAS, respuestas_criticas)
         )
         lineas.append(f'Acciones correctivas / Observaciones: {registro.critico_observaciones}')
         detalle += '\n' + '\n'.join(lineas)
@@ -93,6 +100,33 @@ class GuardarPesajeView(APIView):
 
 class EnviarSupervisorView(GuardarPesajeView):
     enviar = True
+
+
+class IniciarPesajeView(APIView):
+    """
+    Sella la hora de inicio del pesaje ("H.INC" de la hoja de proceso) cuando
+    el operario abre el registro de cantidades. Es idempotente: si ya se selló,
+    no la mueve, para que el dato siga siendo el del primer inicio real.
+    """
+
+    permission_classes = [IsAuthenticated, EsPesaje]
+
+    @transaction.atomic
+    def patch(self, request, pk):
+        orden = bloquear_orden(pk, OrdenProduccion.Estado.PESAJE)
+        registro = get_object_or_404(RegistroPesaje, orden=orden)
+        if registro.fecha_inicio_pesaje is None:
+            registro.fecha_inicio_pesaje = timezone.now()
+            registro.save(update_fields=['fecha_inicio_pesaje', 'fecha_modificacion'])
+            registrar_historial(
+                orden,
+                request.user,
+                'pesaje_registro',
+                '',
+                'Inicio del pesaje de materias primas',
+                detalle=f'Operario: {registro.nombre_operario}',
+            )
+        return Response(OrdenProduccionSerializer(OrdenProduccion.objects.get(pk=pk)).data)
 
 
 class RevisarPesajeView(APIView):

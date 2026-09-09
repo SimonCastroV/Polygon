@@ -16,7 +16,7 @@ class FlujoPesajeTests(APITestCase):
     def setUpTestData(cls):
         cls.usuarios = {
             rol: CustomUser.objects.create_user(username=rol, rol=rol)
-            for rol in ('produccion', 'picky', 'pesaje', 'supervisor_pesaje', 'supervisor', 'admin')
+            for rol in ('produccion', 'picky', 'pesaje', 'supervisor', 'admin')
         }
         cls.orden = OrdenProduccion.objects.create(
             grupo_critico_pesaje='no_critico',
@@ -153,9 +153,9 @@ class FlujoPesajeTests(APITestCase):
         self.assertEqual(self.accion('enviar', self.datos()).status_code, 400)
         self.assertEqual(HistorialOrdenProduccion.objects.filter(campo='estado').count(), 1)
 
-    def test_solo_supervisor_pesaje_aprueba_o_devuelve(self):
+    def test_solo_supervisor_aprueba_o_devuelve(self):
         self.enviar()
-        for rol in ['pesaje', 'picky', 'produccion', 'supervisor', 'admin']:
+        for rol in ['pesaje', 'picky', 'produccion', 'admin']:
             self.client.force_authenticate(self.usuarios[rol])
             for accion in ['aprobar', 'devolver']:
                 with self.subTest(rol=rol, accion=accion):
@@ -172,13 +172,13 @@ class FlujoPesajeTests(APITestCase):
         self.assertEqual(self.accion('devolver', {'motivo': 'x'}).status_code, 403)
 
     def test_supervisor_no_edita_el_formulario(self):
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
+        self.client.force_authenticate(self.usuarios['supervisor'])
         self.assertEqual(self.accion('guardar', self.datos()).status_code, 403)
         self.assertEqual(self.accion('enviar', self.datos()).status_code, 403)
 
     def test_devolucion_exige_motivo(self):
         self.enviar()
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
+        self.client.force_authenticate(self.usuarios['supervisor'])
         for datos in [{}, {'motivo': ''}, {'motivo': '   '}]:
             self.assertEqual(self.accion('devolver', datos).status_code, 400)
         self.orden.refresh_from_db()
@@ -186,7 +186,7 @@ class FlujoPesajeTests(APITestCase):
 
     def test_ciclo_devolucion_correccion_reenvio_aprobacion_con_historial(self):
         self.enviar()
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
+        self.client.force_authenticate(self.usuarios['supervisor'])
         motivo = 'Corregir identificación. ' * 30
         respuesta = self.accion('devolver', {'motivo': motivo})
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
@@ -198,12 +198,12 @@ class FlujoPesajeTests(APITestCase):
         respuesta = self.accion('enviar')
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
         self.assertIsNone(respuesta.data['pesaje']['supervisor_username'])
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
+        self.client.force_authenticate(self.usuarios['supervisor'])
         respuesta = self.accion('aprobar')
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
         self.assertEqual(respuesta.data['estado'], 'mezcla')
         self.assertEqual(respuesta.data['pesaje']['revision'], 'aprobada')
-        self.assertEqual(respuesta.data['pesaje']['supervisor_username'], 'supervisor_pesaje')
+        self.assertEqual(respuesta.data['pesaje']['supervisor_username'], 'supervisor')
         self.assertIsNotNone(respuesta.data['pesaje']['fecha_revision'])
         eventos = HistorialOrdenProduccion.objects.filter(campo='estado').order_by('id')
         self.assertEqual(
@@ -220,26 +220,29 @@ class FlujoPesajeTests(APITestCase):
         MaterialOrden.objects.create(
             orden=self.orden, codigo='M02', descripcion='Nuevo', porcentaje=0, cantidad=1
         )
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
+        self.client.force_authenticate(self.usuarios['supervisor'])
         self.assertEqual(self.accion('aprobar').status_code, 400)
 
-    def test_bandejas_y_detalles_filtrados_por_estado(self):
+    def test_bandeja_de_pesaje_filtrada_y_supervisor_consulta_todo(self):
         listado = reverse('ordenes-list')
         detalle = reverse('ordenes-detail', kwargs={'pk': self.orden.pk})
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
-        self.assertEqual(self.client.get(listado).data, [])
-        self.assertEqual(self.client.get(detalle).status_code, 404)
-        self.client.force_authenticate(self.usuarios['pesaje'])
+        # Pesaje solo alcanza su propia cola: la OP mientras está En Pesaje.
         self.assertEqual(len(self.client.get(listado).data), 1)
         self.enviar()
         self.assertEqual(self.client.get(listado).data, [])
         self.assertEqual(self.client.get(detalle).status_code, 404)
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
+        # El Supervisor consulta todas las OP en cualquier estado (también las
+        # necesita en su pantalla principal); su bandeja de supervisión filtra
+        # por estado en el frontend.
+        self.client.force_authenticate(self.usuarios['supervisor'])
         self.assertEqual(len(self.client.get(listado).data), 1)
         self.assertEqual(self.client.get(detalle).status_code, 200)
         self.accion('aprobar')
+        self.assertEqual(len(self.client.get(listado).data), 1)
+        self.assertEqual(self.client.get(detalle).status_code, 200)
+        # Ya aprobada (En Mezcla), Pesaje deja de verla.
+        self.client.force_authenticate(self.usuarios['pesaje'])
         self.assertEqual(self.client.get(listado).data, [])
-        self.assertEqual(self.client.get(detalle).status_code, 404)
 
     def test_rollback_si_falla_trazabilidad(self):
         with (
@@ -293,6 +296,81 @@ class FlujoPesajeTests(APITestCase):
         for campo, _ in VERIFICACIONES_CRITICAS:
             self.assertIsNone(respuesta.data['pesaje'][campo])
 
+    def test_inicio_de_pesaje_se_sella_una_sola_vez(self):
+        self.assertEqual(self.accion('guardar', {'nombre_operario': 'Ana'}).status_code, 200)
+        respuesta = self.accion('iniciar')
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        inicio = respuesta.data['pesaje']['fecha_inicio_pesaje']
+        self.assertIsNotNone(inicio)
+        # Volver a entrar a la vista no mueve la hora de inicio real.
+        self.assertEqual(self.accion('iniciar').data['pesaje']['fecha_inicio_pesaje'], inicio)
+        self.assertEqual(
+            HistorialOrdenProduccion.objects.filter(
+                valor_nuevo='Inicio del pesaje de materias primas'
+            ).count(),
+            1,
+        )
+
+    def test_iniciar_pesaje_solo_lo_hace_el_operario_de_pesaje(self):
+        self.accion('guardar', {'nombre_operario': 'Ana'})
+        for rol in ['supervisor', 'picky', 'produccion', 'admin']:
+            self.client.force_authenticate(self.usuarios[rol])
+            with self.subTest(rol=rol):
+                self.assertEqual(self.accion('iniciar').status_code, 403)
+        RegistroPesaje.objects.get().refresh_from_db()
+        self.assertIsNone(RegistroPesaje.objects.get().fecha_inicio_pesaje)
+
+    def test_critico_no_exige_las_verificaciones_del_formulario_normal(self):
+        self.marcar_critico()
+        datos = {
+            'lote_anterior': 'L001',
+            'referencia_anterior': 'Referencia anterior',
+            'lote_actual': 'L002',
+            'nombre_operario': 'Ana Pérez',
+            'pesos': [{'material': self.material.pk, 'peso_real': '10.1250'}],
+            **dict.fromkeys([campo for campo, _ in VERIFICACIONES_CRITICAS], True),
+        }
+        respuesta = self.accion('enviar', datos)
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertEqual(respuesta.data['estado'], 'supervision_pesaje')
+        for campo, _ in VERIFICACIONES:
+            self.assertIsNone(respuesta.data['pesaje'][campo])
+
+    def test_no_cumple_exige_observacion_pero_no_impide_avanzar(self):
+        datos = self.datos()
+        datos['piso_limpio'] = False
+        datos['observaciones'] = ''
+        respuesta = self.accion('enviar', datos)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('observaciones', respuesta.data)
+        self.assertFalse(RegistroPesaje.objects.exists())
+        datos['observaciones'] = 'El piso tenía derrame; se limpió antes de pesar.'
+        respuesta = self.accion('enviar', datos)
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertEqual(respuesta.data['estado'], 'supervision_pesaje')
+
+    def test_no_cumple_critico_exige_acciones_correctivas(self):
+        self.marcar_critico()
+        datos = self.datos_criticos()
+        datos['critico_cero_pellets'] = False
+        datos['critico_observaciones'] = ''
+        respuesta = self.accion('enviar', datos)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('critico_observaciones', respuesta.data)
+
+    def test_recepcion_critica_no_vuelca_checklist_pendiente_en_historial(self):
+        self.marcar_critico()
+        respuesta = self.accion('guardar', {'nombre_operario': 'Ana'})
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        evento = HistorialOrdenProduccion.objects.get(campo='pesaje_registro')
+        self.assertEqual(evento.detalle, 'Operario: Ana')
+        respuesta = self.accion('guardar', {'critico_cero_pellets': True})
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        evento_actualizado = HistorialOrdenProduccion.objects.filter(
+            campo='pesaje_registro'
+        ).latest('id')
+        self.assertIn('Cero Pellets en el Piso”. Cumple', evento_actualizado.detalle)
+
     def test_cada_grupo_critico_requiere_todas_las_respuestas(self):
         for grupo in ['blancos', 'aditivos_retardantes', 'hojas_azules']:
             self.marcar_critico(grupo)
@@ -323,7 +401,7 @@ class FlujoPesajeTests(APITestCase):
         respuesta = self.accion('enviar', datos)
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
         self.assertEqual(respuesta.data['estado'], 'supervision_pesaje')
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
+        self.client.force_authenticate(self.usuarios['supervisor'])
         respuesta = self.client.get(reverse('ordenes-detail', kwargs={'pk': self.orden.pk}))
         self.assertEqual(respuesta.status_code, 200)
         self.assertTrue(respuesta.data['es_critico_pesaje'])
@@ -340,7 +418,7 @@ class FlujoPesajeTests(APITestCase):
         datos = self.datos_criticos()
         datos['critico_cero_pellets'] = False
         self.assertEqual(self.accion('enviar', datos).status_code, 200)
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
+        self.client.force_authenticate(self.usuarios['supervisor'])
         respuesta = self.accion('devolver', {'motivo': 'Revisar pellets'})
         self.assertEqual(respuesta.status_code, 200)
         self.assertIs(respuesta.data['pesaje']['critico_cero_pellets'], False)
@@ -364,7 +442,7 @@ class FlujoPesajeTests(APITestCase):
                 campo='pesaje_registro', detalle__contains='Cero Pellets en el Piso”. No cumple'
             ).exists()
         )
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
+        self.client.force_authenticate(self.usuarios['supervisor'])
         self.assertEqual(self.accion('devolver', {'motivo': 'Corregir'}).status_code, 200)
         self.client.force_authenticate(self.usuarios['pesaje'])
         self.assertEqual(self.accion('enviar', {'critico_cero_pellets': True}).status_code, 200)
@@ -397,8 +475,44 @@ class FlujoPesajeTests(APITestCase):
         self.marcar_critico()
         self.assertEqual(self.accion('enviar', self.datos_criticos()).status_code, 200)
         RegistroPesaje.objects.filter(orden=self.orden).update(critico_cero_pellets=None)
-        self.client.force_authenticate(self.usuarios['supervisor_pesaje'])
+        self.client.force_authenticate(self.usuarios['supervisor'])
         self.assertEqual(self.accion('aprobar').status_code, 400)
+
+    def ingresar(self, datos):
+        return self.client.patch(
+            reverse('ordenes-ingresar', kwargs={'pk': self.orden.pk}), datos, format='json'
+        )
+
+    def test_produccion_clasifica_el_producto_y_queda_en_el_historial(self):
+        self.marcar_critico('')
+        self.client.force_authenticate(self.usuarios['produccion'])
+        respuesta = self.ingresar({'grupo_critico_pesaje': 'blancos'})
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertEqual(respuesta.data['grupo_critico_pesaje'], 'blancos')
+        self.assertTrue(respuesta.data['es_critico_pesaje'])
+        evento = HistorialOrdenProduccion.objects.get(campo='grupo_critico_pesaje')
+        self.assertEqual(evento.valor_nuevo, 'blancos')
+        self.assertEqual(evento.modificado_por, self.usuarios['produccion'])
+        self.assertIn('Blancos', evento.detalle)
+
+    def test_solo_produccion_clasifica_el_producto(self):
+        for rol in ['pesaje', 'picky', 'supervisor', 'admin']:
+            self.client.force_authenticate(self.usuarios[rol])
+            with self.subTest(rol=rol):
+                self.assertEqual(self.ingresar({'grupo_critico_pesaje': 'blancos'}).status_code, 403)
+        self.orden.refresh_from_db()
+        self.assertEqual(self.orden.grupo_critico_pesaje, 'no_critico')
+
+    def test_no_se_reclasifica_despues_de_enviar_a_supervision(self):
+        self.enviar()
+        self.client.force_authenticate(self.usuarios['produccion'])
+        respuesta = self.ingresar({'grupo_critico_pesaje': 'blancos'})
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('grupo_critico_pesaje', respuesta.data)
+        self.orden.refresh_from_db()
+        self.assertEqual(self.orden.grupo_critico_pesaje, 'no_critico')
+        # Las observaciones sí se pueden seguir editando.
+        self.assertEqual(self.ingresar({'observaciones': 'Nota posterior'}).status_code, 200)
 
     def test_admin_congela_grupo_enviado_pero_permite_clasificar_legadas(self):
         from django.contrib.admin.sites import AdminSite

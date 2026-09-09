@@ -70,7 +70,7 @@ async function cerrarSesion() {
         Pesaje
       </router-link>
       <router-link
-        v-if="auth.rol === 'supervisor_pesaje'"
+        v-if="auth.rol === 'supervisor'"
         :to="{ name: 'supervision-pesaje-ordenes' }"
         class="shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-semibold"
         active-class="border-navy-900 text-navy-900"

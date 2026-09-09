@@ -1,20 +1,25 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api from '../../services/api'
 import { useAuthStore } from '../../store/auth'
 import Badge from '../../components/ui/Badge.vue'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import BaseInput from '../../components/ui/BaseInput.vue'
-import OrdenResumen from '../../components/produccion/OrdenResumen.vue'
 import OrdenTrazabilidad from '../../components/produccion/OrdenTrazabilidad.vue'
-import { CLASIFICACION_BADGE, ESTADO_BADGE, mapearErroresCampo } from '../../utils/ordenes'
+import {
+  CLASIFICACION_BADGE,
+  ESTADO_BADGE,
+  formatearFechaHora,
+  mapearErroresCampo,
+} from '../../utils/ordenes'
 import VerificacionesPesaje from '../../components/produccion/VerificacionesPesaje.vue'
 import { VERIFICACIONES_PESAJE, VERIFICACIONES_CRITICAS } from '../../utils/pesaje'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
-const esSupervisor = computed(() => auth.rol === 'supervisor_pesaje')
+const esSupervisor = computed(() => auth.rol === 'supervisor')
 const rutaBandeja = computed(() =>
   esSupervisor.value ? 'supervision-pesaje-ordenes' : 'pesaje-ordenes',
 )
@@ -29,25 +34,24 @@ const motivo = ref('')
 const editable = computed(() => auth.rol === 'pesaje' && orden.value?.estado === 'pesaje')
 const revisable = computed(() => esSupervisor.value && orden.value?.estado === 'supervision_pesaje')
 const esCritico = computed(() => orden.value?.es_critico_pesaje === true)
+// La OP queda "recibida en Pesaje" en cuanto existe su registro (ver
+// confirmarRecepcion): antes de eso solo se muestra el paso de recepción.
+const recibidaEnPesaje = computed(() => Boolean(orden.value?.pesaje))
+// Un producto crítico usa exclusivamente el formulario de condiciones
+// críticas; uno normal usa exclusivamente el formulario estándar. Nunca se
+// muestran ni se exigen los dos a la vez.
 const verificacionesAplicables = computed(() =>
-  esCritico.value ? [...VERIFICACIONES_PESAJE, ...VERIFICACIONES_CRITICAS] : VERIFICACIONES_PESAJE,
+  esCritico.value ? VERIFICACIONES_CRITICAS : VERIFICACIONES_PESAJE,
 )
 const noCumple = computed(() =>
   verificacionesAplicables.value.some(([campo]) => form.value[campo] === false),
 )
-const unidadVisible = computed(() => orden.value?.unidad?.trim() || 'Sin unidad')
-
-// Solo presentación: conserva todos los decimales significativos, sin redondear pesos.
-function formatearCantidad(valor) {
-  return String(valor ?? '').replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1')
-}
-
-function diferenciaVisible(material, peso) {
-  if (!esSupervisor.value || !String(peso).trim()) return ''
-  const diferencia = Number((Number(peso) - Number(material.cantidad)).toFixed(4))
-  if (!Number.isFinite(diferencia) || diferencia === 0) return ''
-  return `${diferencia > 0 ? '+' : ''}${formatearCantidad(diferencia.toFixed(4))} ${unidadVisible.value}`
-}
+// Campo de observaciones del formulario que esté activo (normal o crítico).
+const campoObservaciones = computed(() => (esCritico.value ? 'critico_observaciones' : 'observaciones'))
+// Si hay algún "No cumple", ese formulario exige explicarlo en observaciones
+// antes de continuar (no bloquea con el "No cumple" en sí, solo exige la
+// justificación).
+const observacionesRequeridas = computed(() => noCumple.value)
 
 const CAMPOS = [
   ['lote_anterior', 'Lote anterior'],
@@ -55,6 +59,79 @@ const CAMPOS = [
   ['lote_actual', 'Lote actual'],
   ['nombre_operario', 'Nombre del operario de Pesaje'],
 ]
+
+// Motivo por el que "Empezar pesaje" no avanzó, en lenguaje del operario.
+const mensajeBloqueo = ref('')
+
+// Pesos que registró el operario en la hoja de proceso (solo los revisa el
+// Supervisor; el operario los captura en PesajeCantidades.vue).
+const registroPesaje = computed(() => orden.value?.pesaje || null)
+const unidadVisible = computed(() => orden.value?.unidad?.trim() || '')
+
+function formatearCantidad(valor) {
+  return String(valor ?? '').replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1')
+}
+
+function pesoDe(material) {
+  return registroPesaje.value?.pesos?.find((peso) => peso.material === material.id)?.peso_real
+}
+
+function pesoRealDe(material) {
+  const peso = pesoDe(material)
+  return peso ? `${formatearCantidad(peso)} ${unidadVisible.value}`.trim() : 'Pendiente'
+}
+
+function diferenciaDe(material) {
+  const peso = pesoDe(material)
+  if (!peso) return ''
+  const diferencia = Number((Number(peso) - Number(material.cantidad)).toFixed(4))
+  if (!Number.isFinite(diferencia) || diferencia === 0) return ''
+  const signo = diferencia > 0 ? '+' : ''
+  return `${signo}${formatearCantidad(diferencia.toFixed(4))} ${unidadVisible.value}`.trim()
+}
+
+// El botón nunca se deshabilita: al pulsarlo se marca en rojo lo que falte y
+// se explica por qué no avanza.
+function validarAvance() {
+  const pendientes = {}
+  const faltantes = []
+  if (!orden.value.grupo_critico_pesaje) {
+    pendientes.grupo_critico_pesaje = 'Producto sin clasificar.'
+    faltantes.push('la clasificación del producto (solicítela en administración)')
+  }
+  const camposVacios = CAMPOS.filter(([campo]) => !String(form.value[campo] || '').trim())
+  for (const [campo] of camposVacios) pendientes[campo] = 'Este campo es obligatorio.'
+  if (camposVacios.length) {
+    faltantes.push(camposVacios.map(([, label]) => label.toLowerCase()).join(', '))
+  }
+  const sinResponder = verificacionesAplicables.value.filter(
+    ([campo]) => form.value[campo] === null || form.value[campo] === undefined,
+  )
+  for (const [campo] of sinResponder) pendientes[campo] = 'Seleccione Cumple o No cumple.'
+  if (sinResponder.length) {
+    faltantes.push(
+      `${sinResponder.length} verificación(es) sin responder`,
+    )
+  }
+  if (noCumple.value && !String(form.value[campoObservaciones.value] || '').trim()) {
+    pendientes[campoObservaciones.value] =
+      'Explique aquí los puntos marcados “No cumple”. Puede continuar una vez explicados.'
+    faltantes.push('la explicación de los puntos marcados “No cumple”')
+  }
+  errores.value = pendientes
+  mensajeBloqueo.value = faltantes.length
+    ? `No se puede empezar el pesaje. Falta: ${faltantes.join('; ')}.`
+    : ''
+  return !faltantes.length
+}
+
+// Paso "Confirmar recibido": crea el registro de Pesaje con el operario que
+// recibe. Reutiliza el mismo endpoint de guardado (PATCH parcial), igual que
+// se persiste el resto del formulario y su trazabilidad.
+const nombreRecepcion = ref('')
+const confirmandoRecepcion = ref(false)
+const erroresRecepcion = ref({})
+const recepcionOk = ref(false)
 
 function mostrarOrden(data) {
   orden.value = data
@@ -69,12 +146,6 @@ function mostrarOrden(data) {
     ),
     critico_observaciones: registro.critico_observaciones || '',
     observaciones: registro.observaciones || '',
-    pesos: data.materiales.map((material) => ({
-      material: material.id,
-      peso_real: formatearCantidad(
-        registro.pesos?.find((peso) => peso.material === material.id)?.peso_real ?? '',
-      ),
-    })),
   }
 }
 
@@ -84,7 +155,11 @@ async function cargarOrden() {
   orden.value = null
   errores.value = {}
   mensaje.value = ''
+  mensajeBloqueo.value = ''
   motivo.value = ''
+  nombreRecepcion.value = ''
+  erroresRecepcion.value = {}
+  recepcionOk.value = false
   try {
     const { data } = await api.get(`/produccion/ordenes/${route.params.id}/`)
     mostrarOrden(data)
@@ -96,67 +171,52 @@ async function cargarOrden() {
   }
 }
 
-function validarEnvio() {
-  const pendientes = {}
-  if (!orden.value.grupo_critico_pesaje) {
-    pendientes.grupo_critico_pesaje =
-      'Solicite clasificar el producto en administración antes de enviarlo.'
+async function confirmarRecepcion() {
+  if (confirmandoRecepcion.value || !editable.value) return
+  erroresRecepcion.value = {}
+  recepcionOk.value = false
+  if (!nombreRecepcion.value.trim()) {
+    erroresRecepcion.value.nombre_operario = 'El nombre del operario de Pesaje es obligatorio.'
+    return
   }
-  for (const [campo] of CAMPOS) {
-    if (!form.value[campo].trim()) pendientes[campo] = 'Este campo es obligatorio.'
+  confirmandoRecepcion.value = true
+  try {
+    const { data } = await api.patch(`/produccion/ordenes/${route.params.id}/pesaje/`, {
+      nombre_operario: nombreRecepcion.value.trim(),
+    })
+    mostrarOrden(data)
+    recepcionOk.value = true
+  } catch (e) {
+    erroresRecepcion.value = mapearErroresCampo(e)
+    if (!Object.keys(erroresRecepcion.value).length)
+      erroresRecepcion.value.detail = 'No se pudo confirmar la recepción. Intente nuevamente.'
+  } finally {
+    confirmandoRecepcion.value = false
   }
-  for (const [campo] of verificacionesAplicables.value) {
-    if (form.value[campo] === null) pendientes[campo] = 'Seleccione Cumple o No cumple.'
-  }
-  if (
-    !form.value.pesos.length ||
-    form.value.pesos.some(
-      (peso) =>
-        !peso.peso_real.trim() ||
-        !Number.isFinite(Number(peso.peso_real)) ||
-        Number(peso.peso_real) <= 0,
-    )
-  )
-    pendientes.pesos = 'Registre un peso positivo para cada materia prima.'
-  errores.value = pendientes
-  return !Object.keys(pendientes).length
 }
 
-async function guardar(enviar = false) {
+// Una sola acción: valida, guarda la verificación y pasa a la vista de pesaje.
+// No hay guardado aparte; lo que se ve en pantalla se persiste al continuar.
+async function empezarPesaje() {
   if (procesando.value || !editable.value) return
   errores.value = {}
   mensaje.value = ''
-  if (enviar && !validarEnvio()) return
+  if (!validarAvance()) return
   procesando.value = true
   try {
-    // Los pesos vacíos quedan pendientes en el borrador; el envío los exige todos.
-    const payload = {
-      ...form.value,
-      pesos: form.value.pesos.filter((peso) => peso.peso_real.trim()),
-    }
+    const payload = { ...form.value }
     if (!esCritico.value) {
       for (const [campo] of VERIFICACIONES_CRITICAS) delete payload[campo]
       delete payload.critico_observaciones
     }
-    const accion = enviar ? 'enviar-supervisor/' : ''
-    const { data } = await api.patch(
-      `/produccion/ordenes/${route.params.id}/pesaje/${accion}`,
-      payload,
-    )
-    mostrarOrden(data)
-    mensaje.value = enviar
-      ? 'OP enviada a Supervisor de Pesaje.'
-      : 'Borrador guardado correctamente.'
+    await api.patch(`/produccion/ordenes/${route.params.id}/pesaje/`, payload)
+    router.push({ name: 'pesaje-orden-pesar', params: { id: route.params.id } })
   } catch (e) {
     errores.value = mapearErroresCampo(e)
-    if (e.response?.data?.pesos) {
-      errores.value.pesos =
-        typeof e.response.data.pesos === 'string'
-          ? e.response.data.pesos
-          : 'Revise los pesos: deben ser positivos, con máximo 10 enteros y 4 decimales, sin materiales repetidos.'
-    }
-    if (!Object.keys(errores.value).length)
-      errores.value.detail = 'No se pudo guardar. Intente nuevamente.'
+    mensajeBloqueo.value =
+      errores.value.detail ||
+      errores.value.non_field_errors ||
+      'No se pudo guardar la verificación. Intente nuevamente.'
   } finally {
     procesando.value = false
   }
@@ -213,9 +273,27 @@ watch(() => route.params.id, cargarOrden, { immediate: true })
         </div>
         <Badge :color="ESTADO_BADGE[orden.estado]">{{ orden.estado_display }}</Badge>
       </div>
+
+      <!-- Visible desde que se abre la OP, antes de cualquier acción: el operario
+           no debe confundir este producto con un pesaje normal. -->
+      <section
+        v-if="esCritico"
+        class="mb-6 rounded-xl border-2 border-danger bg-red-50 p-5 shadow-sm"
+      >
+        <p class="text-sm font-bold uppercase tracking-wide text-danger">⚠️ Producto crítico</p>
+        <p class="mt-1 text-sm text-ink-900">
+          Este producto (<span class="font-semibold">{{
+            orden.grupo_critico_pesaje_display
+          }}</span
+          >) tiene condiciones especiales de Pesaje. Además de la verificación estándar, complete
+          la verificación de condiciones críticas antes de continuar.
+        </p>
+      </section>
+
       <p v-if="mensaje" role="status" class="mb-4 text-sm font-medium text-navy-900">
         {{ mensaje }}
       </p>
+
       <section class="mb-6 rounded-xl bg-white p-5 shadow-sm">
         <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
           Indicaciones de Producción
@@ -237,8 +315,49 @@ watch(() => route.params.id, cargarOrden, { immediate: true })
           </div>
         </dl>
       </section>
-      <OrdenResumen :orden="orden" />
-      <OrdenTrazabilidad :orden="orden" />
+
+      <OrdenTrazabilidad :orden="orden" solo-pesaje :mostrar-eventos="esSupervisor" />
+
+      <!-- Confirmar recibido: paso obligatorio antes del formulario de verificación.
+           Crea el registro de Pesaje (operario + fecha/hora del servidor) y una vez
+           hecho, este bloque se reemplaza por el formulario. -->
+      <section
+        v-if="editable && !recibidaEnPesaje"
+        class="mb-6 rounded-xl bg-white p-5 shadow-sm"
+      >
+        <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
+          Confirmar recibido
+        </h2>
+        <p class="mb-4 text-sm text-ink-500">
+          Confirme que la Orden de Producción llegó a Pesaje. La fecha y hora las registra el
+          sistema automáticamente.
+        </p>
+        <form class="space-y-4" @submit.prevent="confirmarRecepcion">
+          <BaseInput
+            v-model="nombreRecepcion"
+            label="Nombre del operario de Pesaje"
+            placeholder="ej. Juan Pérez"
+            :error="erroresRecepcion.nombre_operario"
+            required
+          />
+          <p v-if="erroresRecepcion.detail" class="text-sm text-danger">
+            {{ erroresRecepcion.detail }}
+          </p>
+          <BaseButton
+            type="submit"
+            variant="primary"
+            class="w-full sm:w-auto"
+            :loading="confirmandoRecepcion"
+          >
+            Confirmar recibido
+          </BaseButton>
+        </form>
+      </section>
+
+      <p v-if="recepcionOk" class="mb-4 text-sm font-medium text-navy-900">
+        Recepción confirmada correctamente.
+      </p>
+
       <section
         v-if="orden.pesaje?.revision === 'devuelta'"
         class="mb-6 rounded-xl bg-white p-5 shadow-sm"
@@ -250,193 +369,230 @@ watch(() => route.params.id, cargarOrden, { immediate: true })
         </p>
       </section>
 
-      <form novalidate @submit.prevent="guardar(true)">
-        <p v-if="!orden.grupo_critico_pesaje" class="mb-4 text-sm font-medium text-danger">
-          Producto sin clasificar. Solicite clasificar el código {{ orden.codigo_producto }} en
-          administración antes de enviarlo a supervisor. Puede guardar el borrador.
-        </p>
-        <p v-if="errores.grupo_critico_pesaje" role="alert" class="mb-4 text-sm text-danger">
-          {{ errores.grupo_critico_pesaje }}
-        </p>
-        <section class="mb-6 rounded-xl bg-white p-5 shadow-sm">
-          <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
-            Verificación de limpieza de Pesaje + Despeje de línea
-          </h2>
-          <fieldset :disabled="!editable || procesando" class="min-w-0 space-y-4">
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <template v-for="[campo, label] in CAMPOS" :key="campo">
-                <BaseInput
-                  v-if="editable"
-                  v-model="form[campo]"
-                  :label="label"
-                  :error="errores[campo]"
-                  required
-                />
-                <div v-else class="text-sm">
-                  <p class="text-ink-500">{{ label }}</p>
-                  <p class="font-medium text-ink-900">{{ form[campo] || '—' }}</p>
+      <template v-if="recibidaEnPesaje">
+        <form novalidate @submit.prevent="empezarPesaje">
+          <p v-if="!orden.grupo_critico_pesaje" class="mb-4 text-sm font-medium text-danger">
+            Producto sin clasificar para Pesaje. Solicite clasificar el código
+            {{ orden.codigo_producto }} en administración.
+          </p>
+          <!-- Un producto crítico usa exclusivamente el formulario de condiciones
+               críticas; uno normal usa exclusivamente el formulario estándar. -->
+          <section v-if="!esCritico" class="mb-6 rounded-xl bg-white p-5 shadow-sm">
+            <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
+              Verificación de limpieza de Pesaje + Despeje de línea
+            </h2>
+            <fieldset :disabled="!editable || procesando" class="min-w-0 space-y-4">
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <template v-for="[campo, label] in CAMPOS" :key="campo">
+                  <BaseInput
+                    v-if="editable"
+                    v-model="form[campo]"
+                    :label="label"
+                    :error="errores[campo]"
+                    required
+                  />
+                  <div v-else class="text-sm">
+                    <p class="text-ink-500">{{ label }}</p>
+                    <p class="font-medium text-ink-900">{{ form[campo] || '—' }}</p>
+                  </div>
+                </template>
+                <div class="text-sm">
+                  <p class="text-ink-500">Referencia actual</p>
+                  <p class="font-medium text-ink-900">
+                    {{ orden.pesaje?.referencia_actual || orden.referencia }}
+                  </p>
                 </div>
-              </template>
-              <div class="text-sm">
-                <p class="text-ink-500">Referencia actual</p>
-                <p class="font-medium text-ink-900">
-                  {{ orden.pesaje?.referencia_actual || orden.referencia }}
+              </div>
+              <p v-if="editable" class="text-sm text-ink-500">
+                Complete todos los campos y verificaciones. Si no hubo un lote anterior, indique
+                “No aplica” en lote y referencia anterior.
+              </p>
+              <VerificacionesPesaje
+                v-model="form"
+                :campos="VERIFICACIONES_PESAJE"
+                :errores="errores"
+                :editable="editable"
+              />
+              <label v-if="editable" class="block">
+                <span class="mb-1.5 block text-sm font-medium text-ink-900">
+                  Observaciones de Pesaje
+                  <span v-if="observacionesRequeridas" class="text-danger">*</span>
+                  <span v-else>(opcional)</span>
+                </span>
+                <textarea
+                  v-model="form.observaciones"
+                  rows="3"
+                  class="w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20"
+                  :class="errores.observaciones ? 'border-danger' : 'border-slate-300'"
+                />
+                <p v-if="errores.observaciones" class="mt-1 text-sm text-danger">
+                  {{ errores.observaciones }}
+                </p>
+              </label>
+              <div v-else class="text-sm">
+                <p class="text-ink-500">Observaciones de Pesaje</p>
+                <p class="whitespace-pre-line text-ink-900">
+                  {{ form.observaciones || 'Sin observaciones.' }}
                 </p>
               </div>
-            </div>
-            <p v-if="editable" class="text-sm text-ink-500">
-              Complete todos los campos y verificaciones. Si no hubo un lote anterior, indique “No
-              aplica” en lote y referencia anterior.
+            </fieldset>
+          </section>
+
+          <section v-if="esCritico" class="mb-6 rounded-xl bg-white p-5 shadow-sm">
+            <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
+              LIBERACIÓN DE CONDICIONES OPERACIONALES PARA PRODUCTOS CRÍTICOS PESAJE
+            </h2>
+            <p class="mb-4 text-sm text-ink-500">
+              Grupo de producto:
+              <Badge color="amber">{{ orden.grupo_critico_pesaje_display }}</Badge>
             </p>
-            <VerificacionesPesaje
-              v-model="form"
-              :campos="VERIFICACIONES_PESAJE"
-              :errores="errores"
-              :editable="editable"
-            />
-            <label v-if="editable" class="block">
-              <span class="mb-1.5 block text-sm font-medium text-ink-900"
-                >Observaciones de Pesaje (opcional)</span
-              >
-              <textarea
-                v-model="form.observaciones"
-                rows="3"
-                class="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20"
-              />
-            </label>
-            <div v-else class="text-sm">
-              <p class="text-ink-500">Observaciones de Pesaje</p>
-              <p class="whitespace-pre-line text-ink-900">
-                {{ form.observaciones || 'Sin observaciones.' }}
+            <fieldset :disabled="!editable || procesando" class="min-w-0 space-y-4">
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <template v-for="[campo, label] in CAMPOS" :key="campo">
+                  <BaseInput
+                    v-if="editable"
+                    v-model="form[campo]"
+                    :label="label"
+                    :error="errores[campo]"
+                    required
+                  />
+                  <div v-else class="text-sm">
+                    <p class="text-ink-500">{{ label }}</p>
+                    <p class="font-medium text-ink-900">{{ form[campo] || '—' }}</p>
+                  </div>
+                </template>
+                <div class="text-sm">
+                  <p class="text-ink-500">Referencia actual</p>
+                  <p class="font-medium text-ink-900">
+                    {{ orden.pesaje?.referencia_actual || orden.referencia }}
+                  </p>
+                </div>
+              </div>
+              <p v-if="editable" class="text-sm text-ink-500">
+                Complete todos los campos y verificaciones. Si no hubo un lote anterior, indique
+                “No aplica” en lote y referencia anterior.
               </p>
-            </div>
-          </fieldset>
-        </section>
-
-        <section v-if="esCritico" class="mb-6 rounded-xl bg-white p-5 shadow-sm">
-          <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
-            LIBERACIÓN DE CONDICIONES OPERACIONALES PARA PRODUCTOS CRÍTICOS PESAJE
-          </h2>
-          <p class="mb-4 text-sm text-ink-500">
-            Grupo de producto: <Badge color="amber">{{ orden.grupo_critico_pesaje_display }}</Badge>
-          </p>
-          <fieldset :disabled="!editable || procesando" class="min-w-0 space-y-4">
-            <VerificacionesPesaje
-              v-model="form"
-              :campos="VERIFICACIONES_CRITICAS"
-              :errores="errores"
-              :editable="editable"
-            />
-            <label v-if="editable" class="block">
-              <span class="mb-1.5 block text-sm font-medium text-ink-900"
-                >Acciones correctivas / Observaciones (opcional)</span
-              >
-              <textarea
-                v-model="form.critico_observaciones"
-                rows="3"
-                class="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20"
+              <VerificacionesPesaje
+                v-model="form"
+                :campos="VERIFICACIONES_CRITICAS"
+                :errores="errores"
+                :editable="editable"
               />
-            </label>
-            <div v-else class="text-sm">
-              <p class="text-ink-500">Acciones correctivas / Observaciones</p>
-              <p class="whitespace-pre-line text-ink-900">
-                {{ form.critico_observaciones || 'Sin observaciones.' }}
-              </p>
-            </div>
-          </fieldset>
-          <!-- Integrar aquí evidencia del registro cuando exista soporte compartido de adjuntos. -->
-        </section>
+              <label v-if="editable" class="block">
+                <span class="mb-1.5 block text-sm font-medium text-ink-900">
+                  Acciones correctivas / Observaciones
+                  <span v-if="observacionesRequeridas" class="text-danger">*</span>
+                  <span v-else>(opcional)</span>
+                </span>
+                <textarea
+                  v-model="form.critico_observaciones"
+                  rows="3"
+                  class="w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20"
+                  :class="errores.critico_observaciones ? 'border-danger' : 'border-slate-300'"
+                />
+                <p v-if="errores.critico_observaciones" class="mt-1 text-sm text-danger">
+                  {{ errores.critico_observaciones }}
+                </p>
+              </label>
+              <div v-else class="text-sm">
+                <p class="text-ink-500">Acciones correctivas / Observaciones</p>
+                <p class="whitespace-pre-line text-ink-900">
+                  {{ form.critico_observaciones || 'Sin observaciones.' }}
+                </p>
+              </div>
+            </fieldset>
+            <!-- Integrar aquí evidencia del registro cuando exista soporte compartido de adjuntos. -->
+          </section>
 
-        <section class="mb-6 rounded-xl bg-white p-5 shadow-sm">
-          <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
-            Cantidades pesadas por materia prima
-          </h2>
-          <p class="mb-4 text-sm text-ink-500">
-            Registre el peso real en la misma unidad de la cantidad de fórmula. La cantidad original
-            se conserva.
+          <p v-if="noCumple" class="mb-4 text-sm font-medium text-danger">
+            El registro contiene verificaciones marcadas “No cumple”. Explíquelas en observaciones;
+            puede continuar con el pesaje y el supervisor las revisará después.
           </p>
-          <fieldset :disabled="!editable || procesando" class="min-w-0">
-            <div class="overflow-x-auto rounded-lg border border-slate-100">
-              <table class="w-full min-w-[560px] text-left text-sm">
-                <thead class="bg-surface-alt text-xs font-semibold uppercase text-ink-500">
-                  <tr>
-                    <th class="px-4 py-2">Código</th>
-                    <th class="px-4 py-2">Descripción</th>
-                    <th class="px-4 py-2">Cantidad esperada</th>
-                    <th class="px-4 py-2">Peso real</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                  <tr v-if="!orden.materiales.length">
-                    <td colspan="4" class="px-4 py-6 text-center text-ink-500">
-                      Esta orden no tiene materiales registrados.
-                    </td>
-                  </tr>
-                  <tr v-for="(material, index) in orden.materiales" :key="material.id">
-                    <td class="px-4 py-2 text-ink-900">{{ material.codigo }}</td>
-                    <td class="px-4 py-2 text-ink-900">{{ material.descripcion }}</td>
-                    <td class="px-4 py-2 text-ink-500 tabular-nums">
-                      {{ formatearCantidad(material.cantidad) }}
-                      <span class="whitespace-nowrap">{{ unidadVisible }}</span>
-                    </td>
-                    <td class="px-4 py-2">
-                      <div v-if="editable" class="flex min-w-[180px] items-end gap-2">
-                        <BaseInput
-                          v-model="form.pesos[index].peso_real"
-                          class="min-w-0 flex-1"
-                          :label="`Peso real · ${material.codigo}`"
-                          type="number"
-                          min="0.0001"
-                          step="0.0001"
-                          required
-                        />
-                        <span class="shrink-0 pb-2.5 text-sm text-ink-500">{{
-                          unidadVisible
-                        }}</span>
-                      </div>
-                      <template v-else>
-                        <span class="font-medium text-ink-900 tabular-nums">
-                          {{
-                            form.pesos[index].peso_real
-                              ? formatearCantidad(form.pesos[index].peso_real)
-                              : 'Pendiente'
-                          }}
-                          <span class="whitespace-nowrap">{{ unidadVisible }}</span>
-                        </span>
-                        <p
-                          v-if="diferenciaVisible(material, form.pesos[index].peso_real)"
-                          class="mt-0.5 text-xs text-ink-500 tabular-nums"
-                          title="Diferencia frente a la cantidad esperada; solo informativa."
-                        >
-                          Diferencia: {{ diferenciaVisible(material, form.pesos[index].peso_real) }}
-                        </p>
-                      </template>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </fieldset>
-          <p v-if="errores.pesos" class="mt-2 text-sm text-danger">{{ errores.pesos }}</p>
-        </section>
-        <p v-if="noCumple" class="mb-4 text-sm font-medium text-danger">
-          El registro contiene verificaciones marcadas “No cumple”. El supervisor debe revisarlas
-          antes de aprobar.
-        </p>
-        <div v-if="Object.keys(errores).length" role="alert" class="mb-4 text-sm text-danger">
-          {{
-            errores.detail ||
-            errores.non_field_errors ||
-            'Revise los campos indicados antes de continuar.'
-          }}
+
+          <!-- Punto de entrada al registro de cantidades pesadas: se implementa en
+               una vista aparte (ver PesajeCantidades.vue). Esta misma acción guarda
+               la verificación, por eso no hay un botón de guardado aparte. -->
+          <section v-if="editable" class="mb-6 rounded-xl bg-white p-5 shadow-sm">
+            <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
+              Pesaje de materias primas
+            </h2>
+            <p class="mb-4 text-sm text-ink-500">
+              Al continuar se guarda la verificación y se abre el registro de cantidades pesadas
+              por materia prima.
+            </p>
+            <p v-if="mensajeBloqueo" role="alert" class="mb-4 text-sm font-medium text-danger">
+              {{ mensajeBloqueo }}
+            </p>
+            <BaseButton
+              type="submit"
+              variant="primary"
+              class="w-full sm:w-auto"
+              :loading="procesando"
+            >
+              Empezar pesaje
+            </BaseButton>
+          </section>
+        </form>
+      </template>
+
+      <!-- Lo que registró el operario en la hoja de proceso: el Supervisor lo
+           revisa antes de liberar a Mezcla. -->
+      <section v-if="esSupervisor && registroPesaje" class="mb-6 rounded-xl bg-white p-5 shadow-sm">
+        <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
+          Pesaje registrado
+        </h2>
+        <dl class="mb-4 grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+          <div>
+            <dt class="text-ink-500">Operario</dt>
+            <dd class="font-medium text-ink-900">{{ registroPesaje.nombre_operario || '—' }}</dd>
+          </div>
+          <div>
+            <dt class="text-ink-500">Inicio del pesaje</dt>
+            <dd class="font-medium text-ink-900">
+              {{ formatearFechaHora(registroPesaje.fecha_inicio_pesaje) }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-ink-500">Fin del pesaje</dt>
+            <dd class="font-medium text-ink-900">
+              {{ formatearFechaHora(registroPesaje.fecha_envio_supervision) }}
+            </dd>
+          </div>
+        </dl>
+        <div class="overflow-x-auto rounded-lg border border-slate-100">
+          <table class="w-full min-w-[520px] text-left text-sm">
+            <thead class="bg-surface-alt text-xs font-semibold uppercase text-ink-500">
+              <tr>
+                <th class="px-4 py-2">Código</th>
+                <th class="px-4 py-2">Descripción</th>
+                <th class="px-4 py-2">Fórmula</th>
+                <th class="px-4 py-2">Peso real</th>
+                <th class="px-4 py-2">Diferencia</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-if="!orden.materiales.length">
+                <td colspan="5" class="px-4 py-6 text-center text-ink-500">
+                  Esta orden no tiene materias primas registradas.
+                </td>
+              </tr>
+              <tr v-for="material in orden.materiales" :key="material.id">
+                <td class="px-4 py-2 text-ink-900">{{ material.codigo }}</td>
+                <td class="px-4 py-2 text-ink-900">{{ material.descripcion }}</td>
+                <td class="px-4 py-2 text-ink-500 tabular-nums">
+                  {{ formatearCantidad(material.cantidad) }} {{ unidadVisible }}
+                </td>
+                <td class="px-4 py-2 font-medium text-ink-900 tabular-nums">
+                  {{ pesoRealDe(material) }}
+                </td>
+                <td class="px-4 py-2 tabular-nums" :class="diferenciaDe(material) ? 'text-danger' : 'text-ink-500'">
+                  {{ diferenciaDe(material) || '—' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div v-if="editable" class="mb-6 flex flex-col gap-3 sm:flex-row">
-          <BaseButton variant="secondary" :disabled="procesando" @click="guardar(false)"
-            >Guardar borrador</BaseButton
-          >
-          <BaseButton type="submit" :loading="procesando">Enviar a supervisor</BaseButton>
-        </div>
-      </form>
+      </section>
 
       <section v-if="revisable" class="rounded-xl bg-white p-5 shadow-sm">
         <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
@@ -458,9 +614,7 @@ watch(() => route.params.id, cargarOrden, { immediate: true })
             }}</span>
           </label>
           <div class="flex flex-col gap-3 sm:flex-row">
-            <BaseButton :loading="procesando" @click="revisar(false)"
-              >Aprobar y enviar a Mezcla</BaseButton
-            >
+            <BaseButton :loading="procesando" @click="revisar(false)">Enviar a Mezcla</BaseButton>
             <BaseButton type="submit" variant="danger" :disabled="procesando"
               >Devolver a Pesaje</BaseButton
             >

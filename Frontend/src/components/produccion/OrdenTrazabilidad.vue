@@ -9,6 +9,19 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  // La trazabilidad de Pesaje no debe mostrar información exclusiva de
+  // Picky (ver OrdenPesajeDetalle.vue). El resto de pantallas (Picky,
+  // Producción/Supervisor) sigue viendo el historial completo de la OP.
+  soloPesaje: {
+    type: Boolean,
+    default: false,
+  },
+  // El detalle evento por evento (respuestas del formulario, devoluciones) es
+  // material de revisión: el operario solo necesita el resumen de hitos.
+  mostrarEventos: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const eventosPesaje = computed(() =>
@@ -28,38 +41,40 @@ function tituloEvento(evento) {
   if (evento.valor_nuevo === 'supervision_pesaje') return 'Enviada a supervisión de Pesaje'
   if (evento.valor_nuevo === 'mezcla') return 'Aprobada y enviada a Mezcla'
   if (evento.valor_anterior === 'supervision_pesaje') return 'Devuelta a Pesaje'
-  return 'Enviada desde Picky a Pesaje'
+  return props.soloPesaje ? 'Llegó a Pesaje' : 'Enviada desde Picky a Pesaje'
 }
 </script>
 
 <template>
   <!-- Solo aparece cuando la OP ya salió de Producción -->
   <section
-    v-if="orden.fecha_envio_picky || orden.pesaje || eventosPesaje.length"
+    v-if="orden.fecha_envio_picky || orden.pesaje || (mostrarEventos && eventosPesaje.length)"
     class="mb-6 rounded-xl bg-white p-5 shadow-sm"
   >
     <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">Trazabilidad</h2>
     <dl class="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-      <div>
+      <div v-if="!soloPesaje">
         <dt class="text-ink-500">Enviada a Picky</dt>
         <dd class="font-medium text-ink-900">{{ formatearFechaHora(orden.fecha_envio_picky) }}</dd>
       </div>
-      <div>
+      <div v-if="!soloPesaje">
         <dt class="text-ink-500">Recibida en Picky</dt>
         <dd class="font-medium text-ink-900">
           {{ formatearFechaHora(orden.fecha_recepcion_picky) }}
         </dd>
       </div>
-      <div>
+      <div v-if="!soloPesaje">
         <dt class="text-ink-500">Operario de Picky</dt>
         <dd class="font-medium text-ink-900">{{ orden.nombre_operario_picky || '—' }}</dd>
       </div>
-      <div>
+      <div v-if="!soloPesaje">
         <dt class="text-ink-500">Estación que recibió</dt>
         <dd class="font-medium text-ink-900">{{ orden.recibida_por_picky_username || '—' }}</dd>
       </div>
       <div v-if="orden.fecha_envio_pesaje">
-        <dt class="text-ink-500">Finalizada en Picky · Enviada a Pesaje</dt>
+        <dt class="text-ink-500">
+          {{ soloPesaje ? 'Llegó a Pesaje' : 'Finalizada en Picky · Enviada a Pesaje' }}
+        </dt>
         <dd class="font-medium text-ink-900">{{ formatearFechaHora(orden.fecha_envio_pesaje) }}</dd>
       </div>
     </dl>
@@ -97,7 +112,10 @@ function tituloEvento(evento) {
         </dd>
       </div>
     </dl>
-    <ol v-if="eventosPesaje.length" class="mt-4 space-y-3 border-t border-slate-100 pt-4 text-sm">
+    <ol
+      v-if="mostrarEventos && eventosPesaje.length"
+      class="mt-4 space-y-3 border-t border-slate-100 pt-4 text-sm"
+    >
       <li v-for="evento in eventosPesaje" :key="evento.id">
         <p class="font-medium text-ink-900">{{ tituloEvento(evento) }}</p>
         <p class="text-ink-500">

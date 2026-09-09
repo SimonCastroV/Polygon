@@ -11,6 +11,7 @@ import {
   CLASIFICACION_BADGE,
   CLASIFICACION_OPCIONES,
   ESTADO_BADGE,
+  GRUPO_CRITICO_OPCIONES,
 } from '../../utils/ordenes'
 
 const route = useRoute()
@@ -23,10 +24,13 @@ const esProduccion = computed(() => auth.rol === 'produccion')
 const orden = ref(null)
 const cargando = ref(true)
 
-const formIngreso = ref({ clasificacion: 'normal', observaciones: '' })
+const formIngreso = ref({ clasificacion: 'normal', observaciones: '', grupo_critico_pesaje: '' })
 const guardando = ref(false)
 const errorGuardar = ref('')
 const guardadoOk = ref(false)
+// La clasificación se congela cuando Pesaje ya envió su formulario a
+// supervisión: cambiarla ahí invalidaría las respuestas ya dadas.
+const grupoBloqueado = computed(() => Boolean(orden.value?.pesaje?.fecha_envio_supervision))
 
 const enviando = ref(false)
 const errorEnvio = ref('')
@@ -39,7 +43,11 @@ async function cargarOrden() {
   cargando.value = true
   const { data } = await api.get(`/produccion/ordenes/${route.params.id}/`)
   orden.value = data
-  formIngreso.value = { clasificacion: data.clasificacion, observaciones: data.observaciones }
+  formIngreso.value = {
+    clasificacion: data.clasificacion,
+    observaciones: data.observaciones,
+    grupo_critico_pesaje: data.grupo_critico_pesaje,
+  }
   cargando.value = false
 }
 
@@ -55,8 +63,9 @@ async function guardarIngreso() {
     orden.value = data
     guardadoOk.value = true
   } catch (e) {
-    const detalle = e.response?.data?.non_field_errors
-    errorGuardar.value = Array.isArray(detalle) ? detalle[0] : 'No se pudo guardar.'
+    const datos = e.response?.data || {}
+    const detalle = datos.non_field_errors || datos.grupo_critico_pesaje
+    errorGuardar.value = Array.isArray(detalle) ? detalle[0] : detalle || 'No se pudo guardar.'
   } finally {
     guardando.value = false
   }
@@ -131,6 +140,28 @@ onMounted(cargarOrden)
             </div>
           </fieldset>
           <label class="block">
+            <span class="mb-1.5 block text-sm font-medium text-ink-900">
+              Grupo de producto para Pesaje
+            </span>
+            <select
+              v-model="formIngreso.grupo_critico_pesaje"
+              :disabled="grupoBloqueado"
+              class="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20 disabled:cursor-not-allowed disabled:bg-surface-alt"
+            >
+              <option v-for="opcion in GRUPO_CRITICO_OPCIONES" :key="opcion.value" :value="opcion.value">
+                {{ opcion.label }}
+              </option>
+            </select>
+            <span class="mt-1 block text-sm text-ink-500">
+              {{
+                grupoBloqueado
+                  ? 'Pesaje ya envió el formulario a supervisión: la clasificación quedó fija.'
+                  : 'Blancos, Aditivos / Retardantes y Hojas azules son productos críticos: Pesaje responderá el formulario de condiciones especiales.'
+              }}
+            </span>
+          </label>
+
+          <label class="block">
             <span class="mb-1.5 block text-sm font-medium text-ink-900">Observaciones</span>
             <textarea
               v-model="formIngreso.observaciones"
@@ -154,6 +185,14 @@ onMounted(cargarOrden)
             <dd class="mt-1">
               <Badge :color="CLASIFICACION_BADGE[orden.clasificacion]">
                 {{ orden.clasificacion_display }}
+              </Badge>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-ink-500">Grupo de producto para Pesaje</dt>
+            <dd class="mt-1">
+              <Badge :color="orden.es_critico_pesaje ? 'red' : 'gray'">
+                {{ orden.grupo_critico_pesaje_display || 'Sin clasificar' }}
               </Badge>
             </dd>
           </div>

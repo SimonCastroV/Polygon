@@ -147,7 +147,10 @@ onMounted(cargarOrden)
         </form>
       </section>
 
-      <!-- Liberación a Pesaje: solo con la recepción ya registrada -->
+      <OrdenResumen :orden="orden" />
+
+      <!-- Liberación a Pesaje: va de última, después de la tabla de materiales,
+           para que Picky revise lo que debe llevar antes de enviar la OP. -->
       <section
         v-if="orden.estado === 'picky' && orden.fecha_recepcion_picky"
         class="mb-6 rounded-xl bg-white p-5 shadow-sm"
@@ -156,7 +159,8 @@ onMounted(cargarOrden)
           Finalizar en Picky
         </h2>
         <p class="mb-4 text-sm text-ink-500">
-          Al enviarla, la orden pasa a Pesaje y queda registrada la fecha y hora de finalización.
+          Revise la lista de materiales antes de enviar. Al enviarla, la orden pasa a Pesaje y
+          queda registrada la fecha y hora de finalización.
         </p>
         <p v-if="errorEnvio" class="mb-3 text-sm text-danger">{{ errorEnvio }}</p>
         <BaseButton
@@ -168,8 +172,6 @@ onMounted(cargarOrden)
           Enviar a Pesaje
         </BaseButton>
       </section>
-
-      <OrdenResumen :orden="orden" />
     </template>
   </main>
 </template>
