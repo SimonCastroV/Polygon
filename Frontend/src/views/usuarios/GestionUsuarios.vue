@@ -9,7 +9,6 @@ import Badge from '../../components/ui/Badge.vue'
 const ROL_BADGE = {
   admin: 'navy',
   supervisor: 'blue',
-  supervisor_pesaje: 'blue',
   produccion: 'amber',
   picky: 'gray',
   pesaje: 'gray',
@@ -242,7 +241,6 @@ onMounted(cargarUsuarios)
           >
             <option value="admin">Administrador</option>
             <option value="supervisor">Supervisor</option>
-            <option value="supervisor_pesaje">Supervisor de Pesaje</option>
             <option value="produccion">Producción</option>
             <option value="picky">Picky</option>
             <option value="pesaje">Pesaje</option>
@@ -327,7 +325,6 @@ onMounted(cargarUsuarios)
           >
             <option value="admin">Administrador</option>
             <option value="supervisor">Supervisor</option>
-            <option value="supervisor_pesaje">Supervisor de Pesaje</option>
             <option value="produccion">Producción</option>
             <option value="picky">Picky</option>
             <option value="pesaje">Pesaje</option>

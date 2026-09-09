@@ -100,14 +100,19 @@ class OrdenProduccionSerializer(serializers.ModelSerializer):
 
 class OrdenProduccionIngresarSerializer(serializers.ModelSerializer):
     """
-    "Ingresar a OP": único dato que Producción diligencia dentro de
+    "Ingresar a OP": únicos datos que Producción diligencia dentro de
     Polygon. El resto de la OP (encabezado y materiales) es de solo
     lectura porque viene de Sumicolor (ver docstring de OrdenProduccion).
+
+    'grupo_critico_pesaje' clasifica el producto para Pesaje (Blancos,
+    Aditivos/Retardantes u Hojas azules son críticos): decide qué formulario
+    responde Pesaje, así que se congela cuando el formulario ya se envió a
+    supervisión, igual que en el admin (ver OrdenProduccionAdmin).
     """
 
     class Meta:
         model = OrdenProduccion
-        fields = ['clasificacion', 'observaciones']
+        fields = ['clasificacion', 'observaciones', 'grupo_critico_pesaje']
 
     def validate(self, attrs):
         if self.instance.estado in (
@@ -116,6 +121,19 @@ class OrdenProduccionIngresarSerializer(serializers.ModelSerializer):
         ):
             raise serializers.ValidationError(
                 'No se puede ingresar a una Orden de Producción Finalizada o Cancelada.'
+            )
+        grupo = attrs.get('grupo_critico_pesaje', self.instance.grupo_critico_pesaje)
+        pesaje = getattr(self.instance, 'pesaje', None)
+        if (
+            grupo != self.instance.grupo_critico_pesaje
+            and pesaje
+            and pesaje.fecha_envio_supervision
+        ):
+            raise serializers.ValidationError(
+                {
+                    'grupo_critico_pesaje': 'Pesaje ya envió el formulario a supervisión: no se '
+                    'puede reclasificar el producto.'
+                }
             )
         return attrs
 

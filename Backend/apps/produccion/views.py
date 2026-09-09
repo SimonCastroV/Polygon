@@ -13,7 +13,7 @@ from .serializers import (
 
 # Campos que se rastrean en HistorialOrdenProduccion cuando cambian al
 # "ingresar a la OP" (ver OrdenProduccionIngresarSerializer).
-CAMPOS_AUDITADOS = ['clasificacion', 'observaciones']
+CAMPOS_AUDITADOS = ['clasificacion', 'observaciones', 'grupo_critico_pesaje']
 
 
 def registrar_historial(orden, usuario, campo, valor_anterior, valor_nuevo, detalle=''):
@@ -36,8 +36,10 @@ def ordenes_visibles_para(usuario):
       avanzaron a Pesaje. (Consulta el filtro "Ya liberado" para verlas)
     - Pesaje ve únicamente las OP pendientes en su etapa, es decir,
       aquellas cuyo estado actual es 'pesaje'.
-    - Supervisor de Pesaje ve únicamente las pendientes de su revisión.
-    - Producción, Supervisor y Administrador pueden consultar todas.
+    - Producción, Supervisor y Administrador pueden consultar todas. El
+      Supervisor además revisa el pesaje, pero no se le restringe el
+      queryset: su vista de supervisión filtra por estado en el frontend,
+      porque también necesita ver todas las OP en su pantalla principal.
     """
     queryset = (
         OrdenProduccion.objects.select_related(
@@ -52,9 +54,6 @@ def ordenes_visibles_para(usuario):
 
     if usuario.rol == 'pesaje':
         return queryset.filter(estado=OrdenProduccion.Estado.PESAJE)
-
-    if usuario.rol == 'supervisor_pesaje':
-        return queryset.filter(estado=OrdenProduccion.Estado.SUPERVISION_PESAJE)
 
     return queryset
 
@@ -109,8 +108,20 @@ class OrdenProduccionIngresarView(generics.UpdateAPIView):
             valor_anterior = valores_anteriores[campo]
             valor_nuevo = getattr(orden_actualizada, campo)
             if valor_anterior != valor_nuevo:
+                # La trazabilidad de Pesaje muestra este detalle al operario.
+                detalle = (
+                    f'Clasificación del producto {orden_actualizada.codigo_producto}: '
+                    f'{orden_actualizada.get_grupo_critico_pesaje_display()}'
+                    if campo == 'grupo_critico_pesaje'
+                    else ''
+                )
                 registrar_historial(
-                    orden_actualizada, self.request.user, campo, valor_anterior, valor_nuevo
+                    orden_actualizada,
+                    self.request.user,
+                    campo,
+                    valor_anterior,
+                    valor_nuevo,
+                    detalle=detalle,
                 )
 
     def update(self, request, *args, **kwargs):

@@ -6,9 +6,9 @@ class PuedeVerOP(BasePermission):
     Consulta de Órdenes de Producción: Producción, Picky, Supervisor y
     Administrador. Picky solo alcanza las OP que Producción ya liberó: ese
     filtro se aplica en el queryset de las vistas (ver
-    apps.produccion.views), no aquí. Pesaje y su supervisor tienen acceso
-    exclusivamente a sus respectivas colas. Los demás roles de estación
-    se incorporarán cuando se construya cada base.
+    apps.produccion.views), no aquí. Pesaje solo alcanza su propia cola. El
+    Supervisor consulta todas y además revisa el pesaje. Los demás roles
+    de estación se incorporarán cuando se construya cada base.
     """
 
     message = 'No tiene permisos para consultar Órdenes de Producción.'
@@ -18,7 +18,7 @@ class PuedeVerOP(BasePermission):
             request.user
             and request.user.is_authenticated
             and request.user.rol
-            in ('admin', 'supervisor', 'produccion', 'picky', 'pesaje', 'supervisor_pesaje')
+            in ('admin', 'supervisor', 'produccion', 'picky', 'pesaje')
         )
 
 

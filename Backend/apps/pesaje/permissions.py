@@ -9,7 +9,14 @@ class EsPesaje(BasePermission):
 
 
 class EsSupervisorPesaje(BasePermission):
-    message = 'Solo el Supervisor de Pesaje puede revisar el pesaje.'
+    """
+    Revisa y libera el pesaje el rol 'supervisor' genérico: por ahora no se
+    distingue un supervisor por área (Pesaje, Mezcla, etc.). Si más adelante
+    el negocio necesita separarlos, se agrega el rol específico y se amplía
+    esta comprobación.
+    """
+
+    message = 'Solo un Supervisor puede revisar el pesaje.'
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.rol == 'supervisor_pesaje'
+        return request.user.is_authenticated and request.user.rol == 'supervisor'

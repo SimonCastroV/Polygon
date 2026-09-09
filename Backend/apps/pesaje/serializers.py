@@ -55,6 +55,7 @@ class RegistroPesajeSerializer(serializers.ModelSerializer):
             'registrado_por_username',
             'fecha_recepcion',
             'fecha_modificacion',
+            'fecha_inicio_pesaje',
             'fecha_envio_supervision',
             'supervisor_username',
             'fecha_revision',
@@ -67,6 +68,7 @@ class RegistroPesajeSerializer(serializers.ModelSerializer):
             'referencia_actual',
             'fecha_recepcion',
             'fecha_modificacion',
+            'fecha_inicio_pesaje',
             'fecha_envio_supervision',
             'fecha_revision',
             'revision',
@@ -101,17 +103,31 @@ class RegistroPesajeSerializer(serializers.ModelSerializer):
                 errores['grupo_critico_pesaje'] = (
                     'La OP está sin clasificar. Solicite clasificar el producto en administración.'
                 )
-            if orden.es_critico_pesaje:
-                for campo, _ in VERIFICACIONES_CRITICAS:
-                    if attrs.get(campo, getattr(self.instance, campo, None)) is None:
-                        errores[campo] = 'Seleccione Cumple o No cumple.'
             for campo in ('lote_anterior', 'referencia_anterior', 'lote_actual', 'nombre_operario'):
                 valor = attrs.get(campo, getattr(self.instance, campo, ''))
                 if not valor.strip():
                     errores[campo] = 'Este campo es obligatorio para enviar a supervisor.'
-            for campo, _ in VERIFICACIONES:
-                if attrs.get(campo, getattr(self.instance, campo, None)) is None:
+            # Un producto crítico responde el formulario de condiciones críticas
+            # y uno normal el estándar: nunca se exigen los dos.
+            verificaciones = VERIFICACIONES_CRITICAS if orden.es_critico_pesaje else VERIFICACIONES
+            respuestas = {
+                campo: attrs.get(campo, getattr(self.instance, campo, None))
+                for campo, _ in verificaciones
+            }
+            for campo, valor in respuestas.items():
+                if valor is None:
                     errores[campo] = 'Seleccione Cumple o No cumple.'
+            # Un "No cumple" no impide continuar, pero sí debe quedar explicado.
+            campo_observaciones = (
+                'critico_observaciones' if orden.es_critico_pesaje else 'observaciones'
+            )
+            observacion = attrs.get(
+                campo_observaciones, getattr(self.instance, campo_observaciones, '')
+            )
+            if any(valor is False for valor in respuestas.values()) and not observacion.strip():
+                errores[campo_observaciones] = (
+                    'Explique los puntos marcados “No cumple” antes de enviar a supervisor.'
+                )
             if pesos is None:
                 ids_pesados = (
                     set(self.instance.pesos.values_list('material_id', flat=True))

@@ -16,31 +16,25 @@ const routes = [
   {
     path: '/admin',
     component: () => import('../layouts/AdminLayout.vue'),
-    // Cada estación y Supervisor de Pesaje tienen rutas y colas propias.
-    // El backend aplica también permisos y filtros por estado.
+    // Cada estación tiene sus rutas y colas propias. La supervisión de
+    // Pesaje la hace el rol 'supervisor' genérico (no hay supervisor por
+    // área). El backend aplica también permisos y filtros por estado.
     meta: {
       requiresAuth: true,
-      rolesPermitidos: [
-        'admin',
-        'supervisor',
-        'produccion',
-        'picky',
-        'pesaje',
-        'supervisor_pesaje',
-      ],
+      rolesPermitidos: ['admin', 'supervisor', 'produccion', 'picky', 'pesaje'],
     },
     children: [
       {
         path: 'supervision-pesaje/ordenes',
         name: 'supervision-pesaje-ordenes',
         component: () => import('../views/pesaje/OrdenesPesaje.vue'),
-        meta: { rolesPermitidos: ['supervisor_pesaje'] },
+        meta: { rolesPermitidos: ['supervisor'] },
       },
       {
         path: 'supervision-pesaje/ordenes/:id',
         name: 'supervision-pesaje-detalle',
         component: () => import('../views/pesaje/OrdenPesajeDetalle.vue'),
-        meta: { rolesPermitidos: ['supervisor_pesaje'] },
+        meta: { rolesPermitidos: ['supervisor'] },
       },
       {
         path: '',
@@ -91,6 +85,15 @@ const routes = [
         component: () => import('../views/pesaje/OrdenPesajeDetalle.vue'),
         meta: { rolesPermitidos: ['pesaje'] },
       },
+      {
+        // Punto de entrada al registro de cantidades pesadas ("Empezar
+        // pesaje"). El contenido del formulario se implementa más adelante;
+        // por ahora solo existe la navegación y la vista destino.
+        path: 'pesaje/ordenes/:id/pesar',
+        name: 'pesaje-orden-pesar',
+        component: () => import('../views/pesaje/PesajeCantidades.vue'),
+        meta: { rolesPermitidos: ['pesaje'] },
+      },
     ],
   },
   {
@@ -112,7 +115,6 @@ export function destinoSegunRol(rol) {
   if (rol === 'admin') return { name: 'admin-usuarios' }
   if (rol === 'supervisor' || rol === 'produccion') return { name: 'admin-ordenes-produccion' }
   if (rol === 'picky') return { name: 'picky-ordenes' }
-  if (rol === 'supervisor_pesaje') return { name: 'supervision-pesaje-ordenes' }
   if (rol === 'pesaje') return { name: 'pesaje-ordenes' }
 
   return { name: 'pendiente' }

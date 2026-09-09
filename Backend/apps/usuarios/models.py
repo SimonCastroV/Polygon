@@ -12,9 +12,9 @@ class CustomUser(AbstractUser):
     class Rol(models.TextChoices):
         ADMIN = 'admin', 'Administrador'
         SUPERVISOR = 'supervisor', 'Supervisor'
-        SUPERVISOR_PESAJE = 'supervisor_pesaje', 'Supervisor de Pesaje'
-        # Una cuenta por estación. El supervisor genérico conserva su consulta;
-        # supervisor_pesaje es el único rol que revisa y libera Pesaje a Mezcla.
+        # Una cuenta por estación. El supervisor genérico consulta todas las OP
+        # y además revisa/libera el pesaje: por ahora no se distingue un
+        # supervisor por área (ver apps.pesaje.permissions.EsSupervisorPesaje).
         PRODUCCION = 'produccion', 'Producción'
         PICKY = 'picky', 'Picky'
         PESAJE = 'pesaje', 'Pesaje'

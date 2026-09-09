@@ -26,6 +26,17 @@ export const CLASIFICACION_OPCIONES = [
   { value: 'peligroso', label: 'Producto peligroso' },
 ]
 
+// Clasificación del producto para Pesaje: los tres últimos son críticos y
+// hacen que Pesaje responda el formulario de condiciones especiales
+// (ver OrdenProduccion.GrupoCriticoPesaje en el backend).
+export const GRUPO_CRITICO_OPCIONES = [
+  { value: '', label: 'Sin clasificar' },
+  { value: 'no_critico', label: 'No crítico' },
+  { value: 'blancos', label: 'Blancos' },
+  { value: 'aditivos_retardantes', label: 'Aditivos / Retardantes a la Llama' },
+  { value: 'hojas_azules', label: 'Hojas azules' },
+]
+
 // Una OP en estos estados ya no está en curso: no se lista como disponible.
 export const ESTADOS_CERRADOS = ['finalizada', 'cancelada']
 

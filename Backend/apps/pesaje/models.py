@@ -116,6 +116,10 @@ class RegistroPesaje(models.Model):
     )
     fecha_recepcion = models.DateTimeField(auto_now_add=True)
     fecha_modificacion = models.DateTimeField(auto_now=True)
+    # "H.INC"/"H.FIN" de la hoja de proceso física: el servidor sella el inicio
+    # cuando el operario abre el pesaje y el fin al enviarlo a supervisión, para
+    # que el operario no tenga que anotar horas a mano.
+    fecha_inicio_pesaje = models.DateTimeField(null=True, blank=True)
     fecha_envio_supervision = models.DateTimeField(null=True, blank=True)
     supervisor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
