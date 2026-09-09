@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import api from '../../services/api'
+import { useAuthStore } from '../../store/auth'
 import BaseButton from '../../components/ui/BaseButton.vue'
 import BaseInput from '../../components/ui/BaseInput.vue'
 import BaseModal from '../../components/ui/BaseModal.vue'
@@ -44,8 +45,12 @@ const guardandoPassword = ref(false)
 // solo permite cambiar el rol y activar/desactivar la cuenta (nombre y
 // apellido no son editables aquí, ver UsuarioUpdateSerializer en backend).
 const modalEditarAbierto = ref(false)
+const auth = useAuthStore()
 const usuarioEditando = ref(null)
 const formEditar = ref({ rol: 'planta', is_active: true })
+// Nadie puede quitarse a sí mismo el acceso: el backend lo rechaza y aquí se
+// bloquean los controles para no ofrecer una acción que va a fallar.
+const esMiCuenta = computed(() => usuarioEditando.value?.id === auth.user?.id)
 const erroresEditar = ref({})
 const guardandoEdicion = ref(false)
 
@@ -317,11 +322,16 @@ onMounted(cargarUsuarios)
         <p class="text-sm text-ink-500">
           Usuario: <span class="font-semibold text-ink-900">{{ usuarioEditando?.username }}</span>
         </p>
+        <p v-if="esMiCuenta" class="rounded-lg bg-warning-bg px-3.5 py-2.5 text-sm text-amber-800">
+          Está editando su propia cuenta: no puede cambiar su rol ni desactivarse. Pídaselo a otro
+          administrador.
+        </p>
         <label class="block">
           <span class="mb-1.5 block text-sm font-medium text-ink-900">Rol</span>
           <select
             v-model="formEditar.rol"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20"
+            :disabled="esMiCuenta"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20 disabled:cursor-not-allowed disabled:bg-surface-alt"
           >
             <option value="admin">Administrador</option>
             <option value="supervisor">Supervisor</option>
@@ -342,10 +352,14 @@ onMounted(cargarUsuarios)
           <input
             v-model="formEditar.is_active"
             type="checkbox"
-            class="h-4 w-4 rounded border-slate-300"
+            :disabled="esMiCuenta"
+            class="h-4 w-4 rounded border-slate-300 disabled:cursor-not-allowed"
           />
           <span class="text-sm font-medium text-ink-900">Usuario activo</span>
         </label>
+        <span v-if="erroresEditar.is_active" class="block text-sm text-danger">{{
+          erroresEditar.is_active
+        }}</span>
 
         <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
           <BaseButton

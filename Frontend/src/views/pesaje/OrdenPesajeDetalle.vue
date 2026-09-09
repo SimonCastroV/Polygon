@@ -14,7 +14,7 @@ import {
   mapearErroresCampo,
 } from '../../utils/ordenes'
 import VerificacionesPesaje from '../../components/produccion/VerificacionesPesaje.vue'
-import { VERIFICACIONES_PESAJE, VERIFICACIONES_CRITICAS } from '../../utils/pesaje'
+import { cargarVerificaciones } from '../../utils/pesaje'
 
 const route = useRoute()
 const router = useRouter()
@@ -37,11 +37,14 @@ const esCritico = computed(() => orden.value?.es_critico_pesaje === true)
 // La OP queda "recibida en Pesaje" en cuanto existe su registro (ver
 // confirmarRecepcion): antes de eso solo se muestra el paso de recepción.
 const recibidaEnPesaje = computed(() => Boolean(orden.value?.pesaje))
+// Definición de los dos formularios, servida por el backend (ver utils/pesaje).
+const verificacionesNormales = ref([])
+const verificacionesCriticas = ref([])
 // Un producto crítico usa exclusivamente el formulario de condiciones
 // críticas; uno normal usa exclusivamente el formulario estándar. Nunca se
 // muestran ni se exigen los dos a la vez.
 const verificacionesAplicables = computed(() =>
-  esCritico.value ? VERIFICACIONES_CRITICAS : VERIFICACIONES_PESAJE,
+  esCritico.value ? verificacionesCriticas.value : verificacionesNormales.value,
 )
 const noCumple = computed(() =>
   verificacionesAplicables.value.some(([campo]) => form.value[campo] === false),
@@ -139,7 +142,7 @@ function mostrarOrden(data) {
   form.value = {
     ...Object.fromEntries(CAMPOS.map(([campo]) => [campo, registro[campo] || ''])),
     ...Object.fromEntries(
-      [...VERIFICACIONES_PESAJE, ...VERIFICACIONES_CRITICAS].map(([campo]) => [
+      [...verificacionesNormales.value, ...verificacionesCriticas.value].map(([campo]) => [
         campo,
         registro[campo] ?? null,
       ]),
@@ -161,6 +164,10 @@ async function cargarOrden() {
   erroresRecepcion.value = {}
   recepcionOk.value = false
   try {
+    // Las verificaciones deben estar antes de armar el formulario.
+    const verificaciones = await cargarVerificaciones()
+    verificacionesNormales.value = verificaciones.normales
+    verificacionesCriticas.value = verificaciones.criticas
     const { data } = await api.get(`/produccion/ordenes/${route.params.id}/`)
     mostrarOrden(data)
   } catch {
@@ -204,11 +211,13 @@ async function empezarPesaje() {
   if (!validarAvance()) return
   procesando.value = true
   try {
+    // Solo viaja el formulario que aplica: el backend rechaza el del otro tipo
+    // de producto para no guardar respuestas que nadie revisó.
     const payload = { ...form.value }
-    if (!esCritico.value) {
-      for (const [campo] of VERIFICACIONES_CRITICAS) delete payload[campo]
-      delete payload.critico_observaciones
-    }
+    const ajenas = esCritico.value
+      ? [...verificacionesNormales.value.map(([campo]) => campo), 'observaciones']
+      : [...verificacionesCriticas.value.map(([campo]) => campo), 'critico_observaciones']
+    for (const campo of ajenas) delete payload[campo]
     await api.patch(`/produccion/ordenes/${route.params.id}/pesaje/`, payload)
     router.push({ name: 'pesaje-orden-pesar', params: { id: route.params.id } })
   } catch (e) {
@@ -409,7 +418,7 @@ watch(() => route.params.id, cargarOrden, { immediate: true })
               </p>
               <VerificacionesPesaje
                 v-model="form"
-                :campos="VERIFICACIONES_PESAJE"
+                :campos="verificacionesNormales"
                 :errores="errores"
                 :editable="editable"
               />
@@ -474,7 +483,7 @@ watch(() => route.params.id, cargarOrden, { immediate: true })
               </p>
               <VerificacionesPesaje
                 v-model="form"
-                :campos="VERIFICACIONES_CRITICAS"
+                :campos="verificacionesCriticas"
                 :errores="errores"
                 :editable="editable"
               />

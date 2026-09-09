@@ -113,7 +113,9 @@ onMounted(cargarOrden)
         Recepción registrada correctamente.
       </p>
 
-      <OrdenTrazabilidad :orden="orden" />
+      <!-- Sin el detalle evento por evento: el volcado del checklist de Pesaje
+           es material de revisión del Supervisor, no de Picky. -->
+      <OrdenTrazabilidad :orden="orden" :mostrar-eventos="false" />
 
       <!-- El formulario solo existe mientras la recepción esté pendiente:
            una vez registrada, el dato ya se ve en Trazabilidad. -->

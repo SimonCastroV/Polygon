@@ -10,9 +10,27 @@ from apps.produccion.models import OrdenProduccion
 from apps.produccion.serializers import OrdenProduccionSerializer
 from apps.produccion.views import registrar_historial
 
-from .models import VERIFICACIONES_CRITICAS, RegistroPesaje
+from .models import VERIFICACIONES, VERIFICACIONES_CRITICAS, RegistroPesaje
 from .permissions import EsPesaje, EsSupervisorPesaje
 from .serializers import DevolucionPesajeSerializer, RegistroPesajeSerializer
+
+
+class VerificacionesPesajeView(APIView):
+    """
+    Definición de los dos formularios de verificación (estándar y de
+    condiciones críticas). El frontend los pinta desde aquí para no mantener
+    una copia de los textos que se desincronice de los campos del modelo.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(
+            {
+                'normales': [list(item) for item in VERIFICACIONES],
+                'criticas': [list(item) for item in VERIFICACIONES_CRITICAS],
+            }
+        )
 
 
 def bloquear_orden(pk, estado):

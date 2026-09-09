@@ -94,6 +94,25 @@ class UsuarioUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Rol no válido.')
         return value
 
+    def validate(self, attrs):
+        """
+        Un administrador no puede quitarse a sí mismo el acceso: si el único
+        admin se desactiva o se cambia de rol, nadie podría volver a entrar a
+        la gestión de usuarios (habría que arreglarlo por consola). Sí puede
+        seguir editando a los demás.
+        """
+        if self.instance != self.context['request'].user:
+            return attrs
+        if attrs.get('rol', self.instance.rol) != self.instance.rol:
+            raise serializers.ValidationError(
+                {'rol': 'No puede cambiar su propio rol. Pídaselo a otro administrador.'}
+            )
+        if not attrs.get('is_active', self.instance.is_active):
+            raise serializers.ValidationError(
+                {'is_active': 'No puede desactivar su propia cuenta.'}
+            )
+        return attrs
+
 
 class CambiarPasswordSerializer(serializers.Serializer):
     new_password = serializers.CharField(write_only=True)

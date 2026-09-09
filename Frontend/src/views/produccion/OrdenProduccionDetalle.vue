@@ -107,7 +107,8 @@ onMounted(cargarOrden)
         <Badge :color="ESTADO_BADGE[orden.estado]">{{ orden.estado_display }}</Badge>
       </div>
 
-      <OrdenResumen :orden="orden" />
+      <!-- El grupo de producto se muestra y se edita en el bloque "Producción". -->
+      <OrdenResumen :orden="orden" :mostrar-grupo-pesaje="false" />
 
       <OrdenTrazabilidad :orden="orden" />
 

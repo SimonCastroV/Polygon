@@ -36,15 +36,22 @@ class FlujoPesajeTests(APITestCase):
     def setUp(self):
         self.client.force_authenticate(self.usuarios['pesaje'])
 
-    def datos(self):
+    def datos_base(self):
+        """Campos comunes a los dos formularios (crítico y estándar)."""
         return {
             'lote_anterior': 'L001',
             'referencia_anterior': 'Referencia anterior',
             'lote_actual': 'L002',
             'nombre_operario': 'Ana Pérez',
+            'pesos': [{'material': self.material.pk, 'peso_real': '10.1250'}],
+        }
+
+    def datos(self):
+        """Formulario estándar: solo lo responde una OP no crítica."""
+        return {
+            **self.datos_base(),
             'observaciones': 'Registro de prueba',
             **dict.fromkeys([campo for campo, _ in VERIFICACIONES], True),
-            'pesos': [{'material': self.material.pk, 'peso_real': '10.1250'}],
         }
 
     def accion(self, nombre, datos=None):
@@ -280,8 +287,9 @@ class FlujoPesajeTests(APITestCase):
         self.orden.save()
 
     def datos_criticos(self):
+        """Formulario de condiciones críticas: sustituye al estándar, no lo suma."""
         return {
-            **self.datos(),
+            **self.datos_base(),
             **dict.fromkeys([campo for campo, _ in VERIFICACIONES_CRITICAS], True),
             'critico_observaciones': 'Se verificó limpieza adicional y segregación.',
         }
@@ -322,19 +330,17 @@ class FlujoPesajeTests(APITestCase):
 
     def test_critico_no_exige_las_verificaciones_del_formulario_normal(self):
         self.marcar_critico()
-        datos = {
-            'lote_anterior': 'L001',
-            'referencia_anterior': 'Referencia anterior',
-            'lote_actual': 'L002',
-            'nombre_operario': 'Ana Pérez',
-            'pesos': [{'material': self.material.pk, 'peso_real': '10.1250'}],
-            **dict.fromkeys([campo for campo, _ in VERIFICACIONES_CRITICAS], True),
-        }
-        respuesta = self.accion('enviar', datos)
+        respuesta = self.accion('enviar', self.datos_criticos())
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
         self.assertEqual(respuesta.data['estado'], 'supervision_pesaje')
         for campo, _ in VERIFICACIONES:
             self.assertIsNone(respuesta.data['pesaje'][campo])
+
+    def test_critico_no_acepta_respuestas_del_formulario_normal(self):
+        self.marcar_critico()
+        self.assertEqual(self.accion('guardar', {'piso_limpio': True}).status_code, 400)
+        self.assertEqual(self.accion('guardar', {'observaciones': 'Nota'}).status_code, 400)
+        self.assertFalse(RegistroPesaje.objects.exists())
 
     def test_no_cumple_exige_observacion_pero_no_impide_avanzar(self):
         datos = self.datos()
@@ -374,7 +380,7 @@ class FlujoPesajeTests(APITestCase):
     def test_cada_grupo_critico_requiere_todas_las_respuestas(self):
         for grupo in ['blancos', 'aditivos_retardantes', 'hojas_azules']:
             self.marcar_critico(grupo)
-            respuesta = self.accion('enviar', self.datos())
+            respuesta = self.accion('enviar', self.datos_base())
             self.assertEqual(respuesta.status_code, 400)
             for campo, _ in VERIFICACIONES_CRITICAS:
                 self.assertIn(campo, respuesta.data)
@@ -389,7 +395,7 @@ class FlujoPesajeTests(APITestCase):
                 respuesta = self.accion('enviar', datos)
                 self.assertEqual(respuesta.status_code, 400)
                 self.assertIn(campo, respuesta.data)
-        self.assertEqual(self.accion('guardar', self.datos()).status_code, 200)
+        self.assertEqual(self.accion('guardar', self.datos_base()).status_code, 200)
         self.assertEqual(self.accion('enviar').status_code, 400)
         self.orden.refresh_from_db()
         self.assertEqual(self.orden.estado, 'pesaje')

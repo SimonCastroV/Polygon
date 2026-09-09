@@ -10,6 +10,13 @@ defineProps({
     type: Object,
     required: true,
   },
+  // En el detalle de Producción el grupo se muestra (y se edita) en su propio
+  // bloque, así que ahí se oculta para no repetir el mismo dato dos veces.
+  // Picky sí lo ve aquí: le avisa si el producto es crítico.
+  mostrarGrupoPesaje: {
+    type: Boolean,
+    default: true,
+  },
 })
 </script>
 
@@ -27,9 +34,11 @@ defineProps({
         <dt class="text-ink-500">Referencia</dt>
         <dd class="font-medium text-ink-900">{{ orden.referencia }}</dd>
       </div>
-      <div>
+      <div v-if="mostrarGrupoPesaje">
         <dt class="text-ink-500">Grupo de producto para Pesaje</dt>
-        <dd class="font-medium text-ink-900">{{ orden.grupo_critico_pesaje_display || 'Sin clasificar' }}</dd>
+        <dd class="font-medium text-ink-900">
+          {{ orden.grupo_critico_pesaje_display || 'Sin clasificar' }}
+        </dd>
       </div>
       <div>
         <dt class="text-ink-500">Cantidad</dt>
