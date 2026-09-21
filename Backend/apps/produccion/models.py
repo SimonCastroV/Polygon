@@ -48,7 +48,7 @@ class OrdenProduccion(models.Model):
         """
 
         PRODUCCION = 'produccion', 'En Producción'
-        PICKY = 'picky', 'En Picky'
+        PICKING = 'picking', 'En Picking'
         PESAJE = 'pesaje', 'En Pesaje'
         SUPERVISION_PESAJE = 'supervision_pesaje', 'En supervisión de Pesaje'
         MEZCLA = 'mezcla', 'En Mezcla'
@@ -92,29 +92,29 @@ class OrdenProduccion(models.Model):
 
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PRODUCCION)
 
-    # --- Trazabilidad de la liberación Producción → Picky ---
+    # --- Trazabilidad de la liberación Producción → Picking ---
     # La fecha/hora la pone siempre el servidor (nunca el operario), para
     # que sirva de base a los reportes del proceso. El detalle del cambio
     # de estado (anterior → nuevo, quién y cuándo) queda además en
     # HistorialOrdenProduccion.
-    fecha_envio_picky = models.DateTimeField(null=True, blank=True)
-    # Nombre de la persona que recibe en Picky: las cuentas de Polygon son
-    # estaciones (ej. 'picky'), no personas, así que el usuario autenticado
+    fecha_envio_picking = models.DateTimeField(null=True, blank=True)
+    # Nombre de la persona que recibe en Picking: las cuentas de Polygon son
+    # estaciones (ej. 'picking'), no personas, así que el usuario autenticado
     # no aporta un nombre propio. Se guardan los dos datos: el nombre que
     # digita el operario y la cuenta desde la que se confirmó.
-    nombre_operario_picky = models.CharField(max_length=120, blank=True)
-    recibida_por_picky = models.ForeignKey(
+    nombre_operario_picking = models.CharField(max_length=120, blank=True)
+    recibida_por_picking = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
-        related_name='ordenes_recibidas_picky',
+        related_name='ordenes_recibidas_picking',
         null=True,
         blank=True,
     )
-    fecha_recepcion_picky = models.DateTimeField(null=True, blank=True)
+    fecha_recepcion_picking = models.DateTimeField(null=True, blank=True)
 
-    # --- Liberación Picky → Pesaje ---
+    # --- Liberación Picking → Pesaje ---
     # Un solo sello de tiempo que marca a la vez la finalización del trabajo
-    # en Picky y el envío a Pesaje. El formulario y la revisión se guardan
+    # en Picking y el envío a Pesaje. El formulario y la revisión se guardan
     # en apps.pesaje; el estado de la OP sigue siendo la fuente del flujo.
     fecha_envio_pesaje = models.DateTimeField(null=True, blank=True)
 

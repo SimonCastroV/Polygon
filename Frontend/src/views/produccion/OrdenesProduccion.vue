@@ -12,7 +12,7 @@ import {
 
 const auth = useAuthStore()
 // Producción "ingresa" a la OP para diligenciar clasificación/observaciones
-// y es la única que puede liberarla a Picky (ver EsProduccion en el backend);
+// y es la única que puede liberarla a Picking (ver EsProduccion en el backend);
 // Admin/Supervisor solo consultan.
 const esProduccion = computed(() => auth.rol === 'produccion')
 const textoBoton = computed(() => (esProduccion.value ? 'Ingresar a OP' : 'Ver detalle'))
@@ -116,10 +116,10 @@ onMounted(cargarOrdenes)
             <dt class="text-ink-500">Producto</dt>
             <dd class="text-right font-medium text-ink-900">{{ orden.referencia }}</dd>
           </div>
-          <div v-if="orden.fecha_envio_picky" class="flex justify-between gap-3">
-            <dt class="text-ink-500">Enviada a Picky</dt>
+          <div v-if="orden.fecha_envio_picking" class="flex justify-between gap-3">
+            <dt class="text-ink-500">Enviada a Picking</dt>
             <dd class="text-right font-medium text-ink-900">
-              {{ formatearFechaHora(orden.fecha_envio_picky) }}
+              {{ formatearFechaHora(orden.fecha_envio_picking) }}
             </dd>
           </div>
         </dl>
@@ -130,7 +130,7 @@ onMounted(cargarOrdenes)
           </Badge>
         </div>
 
-        <!-- La OP se libera a Picky desde su detalle, no desde la card: así el
+        <!-- La OP se libera a Picking desde su detalle, no desde la card: así el
              operario ve la orden completa antes de mandarla. -->
         <div class="mt-auto flex flex-col gap-2 pt-1">
           <router-link

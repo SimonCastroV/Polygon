@@ -17,7 +17,7 @@ import {
 const route = useRoute()
 const auth = useAuthStore()
 // Solo Producción (rol 'produccion') diligencia clasificación/observaciones
-// y libera la OP a Picky (ver EsProduccion en el backend); Admin/Supervisor
+// y libera la OP a Picking (ver EsProduccion en el backend); Admin/Supervisor
 // las consultan de solo lectura.
 const esProduccion = computed(() => auth.rol === 'produccion')
 
@@ -35,7 +35,7 @@ const grupoBloqueado = computed(() => Boolean(orden.value?.pesaje?.fecha_envio_s
 const enviando = ref(false)
 const errorEnvio = ref('')
 
-const puedeEnviarAPicky = computed(
+const puedeEnviarAPicking = computed(
   () => esProduccion.value && orden.value?.estado === 'produccion',
 )
 
@@ -71,17 +71,17 @@ async function guardarIngreso() {
   }
 }
 
-async function mandarAPicky() {
+async function mandarAPicking() {
   errorEnvio.value = ''
   enviando.value = true
   try {
-    const { data } = await api.patch(`/produccion/ordenes/${route.params.id}/enviar-picky/`)
+    const { data } = await api.patch(`/produccion/ordenes/${route.params.id}/enviar-picking/`)
     orden.value = data
   } catch (e) {
     const detalle = e.response?.data?.non_field_errors
     errorEnvio.value = Array.isArray(detalle)
       ? detalle[0]
-      : 'No se pudo mandar la orden a Picky.'
+      : 'No se pudo mandar la orden a Picking.'
   } finally {
     enviando.value = false
   }
@@ -206,24 +206,24 @@ onMounted(cargarOrden)
         </dl>
       </section>
 
-      <!-- Liberación a Picky: solo Producción y solo mientras la OP siga aquí -->
+      <!-- Liberación a Picking: solo Producción y solo mientras la OP siga aquí -->
       <section v-if="esProduccion" class="rounded-xl bg-white p-5 shadow-sm">
         <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
-          Liberar a Picky
+          Liberar a Picking
         </h2>
 
-        <template v-if="puedeEnviarAPicky">
+        <template v-if="puedeEnviarAPicking">
           <p class="mb-4 text-sm text-ink-500">
-            Al mandarla, la orden pasa a Picky y queda registrada la fecha y hora del envío.
+            Al mandarla, la orden pasa a Picking y queda registrada la fecha y hora del envío.
           </p>
           <p v-if="errorEnvio" class="mb-3 text-sm text-danger">{{ errorEnvio }}</p>
           <BaseButton
             variant="primary"
             class="w-full sm:w-auto"
             :loading="enviando"
-            @click="mandarAPicky"
+            @click="mandarAPicking"
           >
-            Mandar orden a Picky
+            Mandar orden a Picking
           </BaseButton>
         </template>
 

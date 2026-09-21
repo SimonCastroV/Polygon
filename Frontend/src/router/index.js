@@ -21,7 +21,7 @@ const routes = [
     // área). El backend aplica también permisos y filtros por estado.
     meta: {
       requiresAuth: true,
-      rolesPermitidos: ['admin', 'supervisor', 'produccion', 'picky', 'pesaje'],
+      rolesPermitidos: ['admin', 'supervisor', 'produccion', 'picking', 'pesaje'],
     },
     children: [
       {
@@ -62,16 +62,16 @@ const routes = [
         meta: { rolesPermitidos: ['admin', 'supervisor', 'produccion'] },
       },
       {
-        path: 'picky/ordenes',
-        name: 'picky-ordenes',
-        component: () => import('../views/picky/OrdenesPicky.vue'),
-        meta: { rolesPermitidos: ['picky'] },
+        path: 'picking/ordenes',
+        name: 'picking-ordenes',
+        component: () => import('../views/picking/OrdenesPicking.vue'),
+        meta: { rolesPermitidos: ['picking'] },
       },
       {
-        path: 'picky/ordenes/:id',
-        name: 'picky-orden-detalle',
-        component: () => import('../views/picky/OrdenPickyDetalle.vue'),
-        meta: { rolesPermitidos: ['picky'] },
+        path: 'picking/ordenes/:id',
+        name: 'picking-orden-detalle',
+        component: () => import('../views/picking/OrdenPickingDetalle.vue'),
+        meta: { rolesPermitidos: ['picking'] },
       },
       {
         path: 'pesaje/ordenes',
@@ -114,7 +114,7 @@ const router = createRouter({
 export function destinoSegunRol(rol) {
   if (rol === 'admin') return { name: 'admin-usuarios' }
   if (rol === 'supervisor' || rol === 'produccion') return { name: 'admin-ordenes-produccion' }
-  if (rol === 'picky') return { name: 'picky-ordenes' }
+  if (rol === 'picking') return { name: 'picking-ordenes' }
   if (rol === 'pesaje') return { name: 'pesaje-ordenes' }
 
   return { name: 'pendiente' }

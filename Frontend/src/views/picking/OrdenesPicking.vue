@@ -1,6 +1,6 @@
 <script setup>
-// Pantalla principal de Picky: las OP que Producción ya liberó, incluidas
-// las que Picky ya pasó a Pesaje (ver ordenes_visibles_para en el backend).
+// Pantalla principal de Picking: las OP que Producción ya liberó, incluidas
+// las que Picking ya pasó a Pesaje (ver ordenes_visibles_para en el backend).
 import { computed, onMounted, ref } from 'vue'
 import api from '../../services/api'
 import Badge from '../../components/ui/Badge.vue'
@@ -17,12 +17,12 @@ const filtro = ref('pendientes')
 const ordenes = ref([])
 const cargando = ref(true)
 
-// Pendiente = llegó de Producción pero Picky aún no confirma la recepción.
-// En proceso = recepción confirmada y sigue En Picky.
-// Ya liberado = Picky ya la envió a Pesaje.
+// Pendiente = llegó de Producción pero Picking aún no confirma la recepción.
+// En proceso = recepción confirmada y sigue En Picking.
+// Ya liberado = Picking ya la envió a Pesaje.
 function grupoDe(orden) {
-  if (orden.estado !== 'picky') return 'liberadas'
-  return orden.fecha_recepcion_picky ? 'proceso' : 'pendientes'
+  if (orden.estado !== 'picking') return 'liberadas'
+  return orden.fecha_recepcion_picking ? 'proceso' : 'pendientes'
 }
 
 const ordenesFiltradas = computed(() =>
@@ -46,7 +46,7 @@ onMounted(cargarOrdenes)
 <template>
   <main class="px-4 py-6 sm:px-6 sm:py-8">
     <div class="mb-4">
-      <h1 class="text-xl font-bold text-ink-900 sm:text-2xl">Picky</h1>
+      <h1 class="text-xl font-bold text-ink-900 sm:text-2xl">Picking</h1>
       <p class="mt-1 text-sm text-ink-500">Órdenes de Producción recibidas de Producción.</p>
     </div>
 
@@ -97,7 +97,7 @@ onMounted(cargarOrdenes)
           <div class="flex justify-between gap-3">
             <dt class="text-ink-500">Recibida el</dt>
             <dd class="text-right font-medium text-ink-900">
-              {{ formatearFechaHora(orden.fecha_envio_picky) }}
+              {{ formatearFechaHora(orden.fecha_envio_picking) }}
             </dd>
           </div>
           <div v-if="orden.fecha_envio_pesaje" class="flex justify-between gap-3">
@@ -112,14 +112,14 @@ onMounted(cargarOrdenes)
           <Badge :color="CLASIFICACION_BADGE[orden.clasificacion]">
             {{ orden.clasificacion_display }}
           </Badge>
-          <Badge v-if="!orden.fecha_recepcion_picky" color="gray">Pendiente de recibir</Badge>
+          <Badge v-if="!orden.fecha_recepcion_picking" color="gray">Pendiente de recibir</Badge>
         </div>
 
         <!-- La OP se envía a Pesaje desde su detalle, no desde la card: así el
              operario ve la orden completa antes de liberarla. -->
         <div class="mt-auto flex flex-col gap-2 pt-1">
           <router-link
-            :to="{ name: 'picky-orden-detalle', params: { id: orden.id } }"
+            :to="{ name: 'picking-orden-detalle', params: { id: orden.id } }"
             class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-ink-900 shadow-sm transition-colors hover:bg-surface-alt focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy-900"
           >
             Visualizar

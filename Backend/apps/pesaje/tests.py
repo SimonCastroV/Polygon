@@ -16,7 +16,7 @@ class FlujoPesajeTests(APITestCase):
     def setUpTestData(cls):
         cls.usuarios = {
             rol: CustomUser.objects.create_user(username=rol, rol=rol)
-            for rol in ('produccion', 'picky', 'pesaje', 'supervisor', 'admin')
+            for rol in ('produccion', 'picking', 'pesaje', 'supervisor', 'admin')
         }
         cls.orden = OrdenProduccion.objects.create(
             grupo_critico_pesaje='no_critico',
@@ -162,7 +162,7 @@ class FlujoPesajeTests(APITestCase):
 
     def test_solo_supervisor_aprueba_o_devuelve(self):
         self.enviar()
-        for rol in ['pesaje', 'picky', 'produccion', 'admin']:
+        for rol in ['pesaje', 'picking', 'produccion', 'admin']:
             self.client.force_authenticate(self.usuarios[rol])
             for accion in ['aprobar', 'devolver']:
                 with self.subTest(rol=rol, accion=accion):
@@ -262,15 +262,15 @@ class FlujoPesajeTests(APITestCase):
         self.orden.refresh_from_db()
         self.assertEqual(self.orden.estado, 'pesaje')
 
-    def test_transicion_desde_picky_conserva_compatibilidad(self):
-        self.orden.estado = 'picky'
+    def test_transicion_desde_picking_conserva_compatibilidad(self):
+        self.orden.estado = 'picking'
         self.orden.save()
-        self.client.force_authenticate(self.usuarios['picky'])
+        self.client.force_authenticate(self.usuarios['picking'])
         url = reverse('ordenes-enviar-pesaje', kwargs={'pk': self.orden.pk})
         self.assertEqual(self.client.patch(url).status_code, 400)
-        recepcion = reverse('ordenes-recepcion-picky', kwargs={'pk': self.orden.pk})
+        recepcion = reverse('ordenes-recepcion-picking', kwargs={'pk': self.orden.pk})
         self.assertEqual(
-            self.client.patch(recepcion, {'nombre_operario_picky': 'Luis'}).status_code, 200
+            self.client.patch(recepcion, {'nombre_operario_picking': 'Luis'}).status_code, 200
         )
         respuesta = self.client.patch(url)
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
@@ -321,7 +321,7 @@ class FlujoPesajeTests(APITestCase):
 
     def test_iniciar_pesaje_solo_lo_hace_el_operario_de_pesaje(self):
         self.accion('guardar', {'nombre_operario': 'Ana'})
-        for rol in ['supervisor', 'picky', 'produccion', 'admin']:
+        for rol in ['supervisor', 'picking', 'produccion', 'admin']:
             self.client.force_authenticate(self.usuarios[rol])
             with self.subTest(rol=rol):
                 self.assertEqual(self.accion('iniciar').status_code, 403)
@@ -502,7 +502,7 @@ class FlujoPesajeTests(APITestCase):
         self.assertIn('Blancos', evento.detalle)
 
     def test_solo_produccion_clasifica_el_producto(self):
-        for rol in ['pesaje', 'picky', 'supervisor', 'admin']:
+        for rol in ['pesaje', 'picking', 'supervisor', 'admin']:
             self.client.force_authenticate(self.usuarios[rol])
             with self.subTest(rol=rol):
                 self.assertEqual(self.ingresar({'grupo_critico_pesaje': 'blancos'}).status_code, 403)

@@ -20,14 +20,14 @@ urlpatterns = [
         name='ordenes-ingresar',
     ),
     path(
-        'ordenes/<int:pk>/enviar-picky/',
-        views.OrdenProduccionEnviarPickyView.as_view(),
-        name='ordenes-enviar-picky',
+        'ordenes/<int:pk>/enviar-picking/',
+        views.OrdenProduccionEnviarPickingView.as_view(),
+        name='ordenes-enviar-picking',
     ),
     path(
-        'ordenes/<int:pk>/recepcion-picky/',
-        views.OrdenProduccionRecepcionPickyView.as_view(),
-        name='ordenes-recepcion-picky',
+        'ordenes/<int:pk>/recepcion-picking/',
+        views.OrdenProduccionRecepcionPickingView.as_view(),
+        name='ordenes-recepcion-picking',
     ),
     path(
         'ordenes/<int:pk>/enviar-pesaje/',
