@@ -52,7 +52,7 @@ INSTALLED_APPS = [
     'apps.calidad',
     'apps.empaque',
     'apps.pesaje',
-    'apps.picky',
+    'apps.picking',
     'apps.reportes',
 ]
 

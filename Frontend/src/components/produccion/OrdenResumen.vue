@@ -1,7 +1,7 @@
 <script setup>
 // Vista de solo lectura del documento de la OP (encabezado de Sumicolor +
 // materiales). La comparten el detalle de Producción/Supervisor y el de
-// Picky para no duplicarlo en dos pantallas. La trazabilidad va aparte,
+// Picking para no duplicarlo en dos pantallas. La trazabilidad va aparte,
 // en OrdenTrazabilidad.vue, porque cada pantalla la ubica en otro lugar.
 import { formatearFecha, formatearFechaHora, formatearHora } from '../../utils/ordenes'
 
@@ -12,7 +12,7 @@ defineProps({
   },
   // En el detalle de Producción el grupo se muestra (y se edita) en su propio
   // bloque, así que ahí se oculta para no repetir el mismo dato dos veces.
-  // Picky sí lo ve aquí: le avisa si el producto es crítico.
+  // Picking sí lo ve aquí: le avisa si el producto es crítico.
   mostrarGrupoPesaje: {
     type: Boolean,
     default: true,

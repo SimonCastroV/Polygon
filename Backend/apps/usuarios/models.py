@@ -16,7 +16,7 @@ class CustomUser(AbstractUser):
         # y además revisa/libera el pesaje: por ahora no se distingue un
         # supervisor por área (ver apps.pesaje.permissions.EsSupervisorPesaje).
         PRODUCCION = 'produccion', 'Producción'
-        PICKY = 'picky', 'Picky'
+        PICKING = 'picking', 'Picking'
         PESAJE = 'pesaje', 'Pesaje'
         MEZCLA = 'mezcla', 'Mezcla'
         EXTRUSION = 'extrusion', 'Extrusión'

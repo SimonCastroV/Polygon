@@ -51,8 +51,8 @@ class OrdenProduccionSerializer(serializers.ModelSerializer):
         source='get_clasificacion_display', read_only=True
     )
     creado_por_username = serializers.CharField(source='creado_por.username', read_only=True)
-    recibida_por_picky_username = serializers.CharField(
-        source='recibida_por_picky.username', read_only=True, default=None
+    recibida_por_picking_username = serializers.CharField(
+        source='recibida_por_picking.username', read_only=True, default=None
     )
     materiales = MaterialOrdenSerializer(many=True, read_only=True)
     pesaje = RegistroPesajeSerializer(read_only=True, default=None)
@@ -85,10 +85,10 @@ class OrdenProduccionSerializer(serializers.ModelSerializer):
             'observaciones',
             'estado',
             'estado_display',
-            'fecha_envio_picky',
-            'nombre_operario_picky',
-            'recibida_por_picky_username',
-            'fecha_recepcion_picky',
+            'fecha_envio_picking',
+            'nombre_operario_picking',
+            'recibida_por_picking_username',
+            'fecha_recepcion_picking',
             'fecha_envio_pesaje',
             'creado_por',
             'creado_por_username',
@@ -138,9 +138,9 @@ class OrdenProduccionIngresarSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class OrdenProduccionEnviarPickySerializer(serializers.ModelSerializer):
+class OrdenProduccionEnviarPickingSerializer(serializers.ModelSerializer):
     """
-    "Mandar orden a Picky": Producción libera la OP. No recibe datos del
+    "Mandar orden a Picking": Producción libera la OP. No recibe datos del
     cliente — el nuevo estado y la fecha/hora los define el servidor — y
     solo procede si la OP sigue En Producción, de modo que no pueda
     enviarse dos veces.
@@ -153,50 +153,50 @@ class OrdenProduccionEnviarPickySerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if self.instance.estado != OrdenProduccion.Estado.PRODUCCION:
             raise serializers.ValidationError(
-                'Solo se puede mandar a Picky una Orden de Producción que esté En '
+                'Solo se puede mandar a Picking una Orden de Producción que esté En '
                 f'Producción. Esta orden ya está en estado "{self.instance.get_estado_display()}".'
             )
         return attrs
 
     def update(self, instance, validated_data):
-        instance.estado = OrdenProduccion.Estado.PICKY
-        instance.fecha_envio_picky = timezone.now()
-        instance.save(update_fields=['estado', 'fecha_envio_picky', 'fecha_modificacion'])
+        instance.estado = OrdenProduccion.Estado.PICKING
+        instance.fecha_envio_picking = timezone.now()
+        instance.save(update_fields=['estado', 'fecha_envio_picking', 'fecha_modificacion'])
         return instance
 
 
-class OrdenProduccionRecepcionPickySerializer(serializers.ModelSerializer):
+class OrdenProduccionRecepcionPickingSerializer(serializers.ModelSerializer):
     """
-    Recepción en Picky: el operario registra su nombre y el servidor
+    Recepción en Picking: el operario registra su nombre y el servidor
     guarda la fecha/hora y la cuenta (estación) desde la que se confirmó.
-    Picky no puede tocar ningún otro dato de la OP.
+    Picking no puede tocar ningún otro dato de la OP.
     """
 
     class Meta:
         model = OrdenProduccion
-        fields = ['nombre_operario_picky']
+        fields = ['nombre_operario_picking']
 
-    def validate_nombre_operario_picky(self, value):
+    def validate_nombre_operario_picking(self, value):
         if not value.strip():
-            raise serializers.ValidationError('El nombre del operario de Picky es obligatorio.')
+            raise serializers.ValidationError('El nombre del operario de Picking es obligatorio.')
         return value.strip()
 
     def validate(self, attrs):
-        if self.instance.estado != OrdenProduccion.Estado.PICKY:
+        if self.instance.estado != OrdenProduccion.Estado.PICKING:
             raise serializers.ValidationError(
-                'Solo se puede registrar la recepción de una Orden de Producción que esté En Picky.'
+                'Solo se puede registrar la recepción de una Orden de Producción que esté En Picking.'
             )
         return attrs
 
     def update(self, instance, validated_data):
-        instance.nombre_operario_picky = validated_data['nombre_operario_picky']
-        instance.recibida_por_picky = self.context['request'].user
-        instance.fecha_recepcion_picky = timezone.now()
+        instance.nombre_operario_picking = validated_data['nombre_operario_picking']
+        instance.recibida_por_picking = self.context['request'].user
+        instance.fecha_recepcion_picking = timezone.now()
         instance.save(
             update_fields=[
-                'nombre_operario_picky',
-                'recibida_por_picky',
-                'fecha_recepcion_picky',
+                'nombre_operario_picking',
+                'recibida_por_picking',
+                'fecha_recepcion_picking',
                 'fecha_modificacion',
             ]
         )
@@ -205,8 +205,8 @@ class OrdenProduccionRecepcionPickySerializer(serializers.ModelSerializer):
 
 class OrdenProduccionEnviarPesajeSerializer(serializers.ModelSerializer):
     """
-    "Enviar a Pesaje": Picky termina su trabajo y libera la OP. La fecha/hora
-    la pone el servidor y sirve a la vez como finalización en Picky y como
+    "Enviar a Pesaje": Picking termina su trabajo y libera la OP. La fecha/hora
+    la pone el servidor y sirve a la vez como finalización en Picking y como
     envío a Pesaje. Exige haber registrado antes la recepción, para que la
     trazabilidad quede completa (quién recibió y cuándo).
     """
@@ -216,14 +216,14 @@ class OrdenProduccionEnviarPesajeSerializer(serializers.ModelSerializer):
         fields = []
 
     def validate(self, attrs):
-        if self.instance.estado != OrdenProduccion.Estado.PICKY:
+        if self.instance.estado != OrdenProduccion.Estado.PICKING:
             raise serializers.ValidationError(
-                'Solo se puede enviar a Pesaje una Orden de Producción que esté En Picky. '
+                'Solo se puede enviar a Pesaje una Orden de Producción que esté En Picking. '
                 f'Esta orden está en estado "{self.instance.get_estado_display()}".'
             )
-        if not self.instance.fecha_recepcion_picky:
+        if not self.instance.fecha_recepcion_picking:
             raise serializers.ValidationError(
-                'Primero debe registrar la recepción en Picky (nombre del operario).'
+                'Primero debe registrar la recepción en Picking (nombre del operario).'
             )
         return attrs
 

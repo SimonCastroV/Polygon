@@ -1,9 +1,9 @@
 // Constantes y formateo compartidos por las vistas de Órdenes de Producción
-// (Producción, Supervisor y Picky), para no repetirlos en cada pantalla.
+// (Producción, Supervisor y Picking), para no repetirlos en cada pantalla.
 
 export const ESTADO_BADGE = {
   produccion: 'blue',
-  picky: 'navy',
+  picking: 'navy',
   pesaje: 'navy',
   supervision_pesaje: 'amber',
   mezcla: 'navy',

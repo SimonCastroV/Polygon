@@ -3,8 +3,8 @@ from rest_framework.permissions import BasePermission
 
 class PuedeVerOP(BasePermission):
     """
-    Consulta de Órdenes de Producción: Producción, Picky, Supervisor y
-    Administrador. Picky solo alcanza las OP que Producción ya liberó: ese
+    Consulta de Órdenes de Producción: Producción, Picking, Supervisor y
+    Administrador. Picking solo alcanza las OP que Producción ya liberó: ese
     filtro se aplica en el queryset de las vistas (ver
     apps.produccion.views), no aquí. Pesaje solo alcanza su propia cola. El
     Supervisor consulta todas y además revisa el pesaje. Los demás roles
@@ -18,7 +18,7 @@ class PuedeVerOP(BasePermission):
             request.user
             and request.user.is_authenticated
             and request.user.rol
-            in ('admin', 'supervisor', 'produccion', 'picky', 'pesaje')
+            in ('admin', 'supervisor', 'produccion', 'picking', 'pesaje')
         )
 
 
@@ -37,14 +37,14 @@ class EsProduccion(BasePermission):
         )
 
 
-class EsPicky(BasePermission):
+class EsPicking(BasePermission):
     """
-    Solo la estación de Picky (rol 'picky') registra la recepción de una
-    OP liberada por Producción. Picky no puede modificar ningún otro dato
-    de la orden (ver OrdenProduccionRecepcionPickySerializer).
+    Solo la estación de Picking (rol 'picking') registra la recepción de una
+    OP liberada por Producción. Picking no puede modificar ningún otro dato
+    de la orden (ver OrdenProduccionRecepcionPickingSerializer).
     """
 
-    message = 'Solo Picky puede registrar la recepción de la Orden de Producción.'
+    message = 'Solo Picking puede registrar la recepción de la Orden de Producción.'
 
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.rol == 'picky')
+        return bool(request.user and request.user.is_authenticated and request.user.rol == 'picking')

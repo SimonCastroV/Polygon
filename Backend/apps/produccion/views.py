@@ -2,12 +2,12 @@ from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 
 from .models import HistorialOrdenProduccion, OrdenProduccion
-from .permissions import EsPicky, EsProduccion, PuedeVerOP
+from .permissions import EsPicking, EsProduccion, PuedeVerOP
 from .serializers import (
     OrdenProduccionEnviarPesajeSerializer,
-    OrdenProduccionEnviarPickySerializer,
+    OrdenProduccionEnviarPickingSerializer,
     OrdenProduccionIngresarSerializer,
-    OrdenProduccionRecepcionPickySerializer,
+    OrdenProduccionRecepcionPickingSerializer,
     OrdenProduccionSerializer,
 )
 
@@ -32,7 +32,7 @@ def ordenes_visibles_para(usuario):
     """
     Define qué Órdenes de Producción puede consultar cada estación.
 
-    - Picky ve las OP que Producción ya liberó, incluso si después
+    - Picking ve las OP que Producción ya liberó, incluso si después
       avanzaron a Pesaje. (Consulta el filtro "Ya liberado" para verlas)
     - Pesaje ve únicamente las OP pendientes en su etapa, es decir,
       aquellas cuyo estado actual es 'pesaje'.
@@ -43,14 +43,14 @@ def ordenes_visibles_para(usuario):
     """
     queryset = (
         OrdenProduccion.objects.select_related(
-            'creado_por', 'recibida_por_picky', 'pesaje__registrado_por', 'pesaje__supervisor'
+            'creado_por', 'recibida_por_picking', 'pesaje__registrado_por', 'pesaje__supervisor'
         )
         .prefetch_related('materiales', 'pesaje__pesos', 'historial__modificado_por')
         .all()
     )
 
-    if usuario.rol == 'picky':
-        return queryset.filter(fecha_envio_picky__isnull=False)
+    if usuario.rol == 'picking':
+        return queryset.filter(fecha_envio_picking__isnull=False)
 
     if usuario.rol == 'pesaje':
         return queryset.filter(estado=OrdenProduccion.Estado.PESAJE)
@@ -75,7 +75,7 @@ class OrdenProduccionListView(generics.ListAPIView):
 class OrdenProduccionDetailView(generics.RetrieveAPIView):
     """
     GET /api/produccion/ordenes/<pk>/ -> detalle completo de la OP
-    (encabezado + tabla de materiales + trazabilidad de Picky).
+    (encabezado + tabla de materiales + trazabilidad de Picking).
     """
 
     serializer_class = OrdenProduccionSerializer
@@ -130,18 +130,18 @@ class OrdenProduccionIngresarView(generics.UpdateAPIView):
         return response
 
 
-class OrdenProduccionEnviarPickyView(generics.UpdateAPIView):
+class OrdenProduccionEnviarPickingView(generics.UpdateAPIView):
     """
-    PATCH /api/produccion/ordenes/<pk>/enviar-picky/ -> "Mandar orden a
-    Picky": solo Producción libera la OP. Cambia el estado En Producción →
-    En Picky, sella la fecha/hora del servidor y deja la transición en
+    PATCH /api/produccion/ordenes/<pk>/enviar-picking/ -> "Mandar orden a
+    Picking": solo Producción libera la OP. Cambia el estado En Producción →
+    En Picking, sella la fecha/hora del servidor y deja la transición en
     HistorialOrdenProduccion. Una OP que ya salió de Producción no puede
-    volver a enviarse (ver OrdenProduccionEnviarPickySerializer).
+    volver a enviarse (ver OrdenProduccionEnviarPickingSerializer).
     """
 
     http_method_names = ['patch']
     queryset = OrdenProduccion.objects.all()
-    serializer_class = OrdenProduccionEnviarPickySerializer
+    serializer_class = OrdenProduccionEnviarPickingSerializer
     permission_classes = [IsAuthenticated, EsProduccion]
 
     def perform_update(self, serializer):
@@ -155,28 +155,28 @@ class OrdenProduccionEnviarPickyView(generics.UpdateAPIView):
         return response
 
 
-class OrdenProduccionRecepcionPickyView(generics.UpdateAPIView):
+class OrdenProduccionRecepcionPickingView(generics.UpdateAPIView):
     """
-    PATCH /api/produccion/ordenes/<pk>/recepcion-picky/ -> Picky confirma
+    PATCH /api/produccion/ordenes/<pk>/recepcion-picking/ -> Picking confirma
     que recibió la OP: registra el nombre del operario y el servidor sella
     la fecha/hora de recepción y la cuenta que confirmó. Solo aplica a OP
-    que estén En Picky.
+    que estén En Picking.
     """
 
     http_method_names = ['patch']
     queryset = OrdenProduccion.objects.all()
-    serializer_class = OrdenProduccionRecepcionPickySerializer
-    permission_classes = [IsAuthenticated, EsPicky]
+    serializer_class = OrdenProduccionRecepcionPickingSerializer
+    permission_classes = [IsAuthenticated, EsPicking]
 
     def perform_update(self, serializer):
-        nombre_anterior = self.get_object().nombre_operario_picky
+        nombre_anterior = self.get_object().nombre_operario_picking
         orden = serializer.save()
         registrar_historial(
             orden,
             self.request.user,
-            'nombre_operario_picky',
+            'nombre_operario_picking',
             nombre_anterior,
-            orden.nombre_operario_picky,
+            orden.nombre_operario_picking,
         )
 
     def update(self, request, *args, **kwargs):
@@ -188,8 +188,8 @@ class OrdenProduccionRecepcionPickyView(generics.UpdateAPIView):
 class OrdenProduccionEnviarPesajeView(generics.UpdateAPIView):
     """
     PATCH /api/produccion/ordenes/<pk>/enviar-pesaje/ -> "Enviar a Pesaje":
-    Picky termina y libera la OP. Cambia el estado En Picky → En Pesaje y
-    sella la fecha/hora del servidor (finalización en Picky = envío a
+    Picking termina y libera la OP. Cambia el estado En Picking → En Pesaje y
+    sella la fecha/hora del servidor (finalización en Picking = envío a
     Pesaje). Desde ahí se registra el formulario en apps.pesaje y se envía
     a Supervisor de Pesaje antes de continuar a Mezcla.
     """
@@ -197,7 +197,7 @@ class OrdenProduccionEnviarPesajeView(generics.UpdateAPIView):
     http_method_names = ['patch']
     queryset = OrdenProduccion.objects.all()
     serializer_class = OrdenProduccionEnviarPesajeSerializer
-    permission_classes = [IsAuthenticated, EsPicky]
+    permission_classes = [IsAuthenticated, EsPicking]
 
     def perform_update(self, serializer):
         estado_anterior = self.get_object().estado

@@ -1,7 +1,7 @@
 <script setup>
-// Detalle de una OP en Picky: consulta de la orden (solo lectura, Picky no
+// Detalle de una OP en Picking: consulta de la orden (solo lectura, Picking no
 // modifica los datos originales) + registro de la recepción. En esta
-// versión Picky NO registra materiales utilizados ni preparados.
+// versión Picking NO registra materiales utilizados ni preparados.
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../../services/api'
@@ -29,7 +29,7 @@ async function cargarOrden() {
   cargando.value = true
   const { data } = await api.get(`/produccion/ordenes/${route.params.id}/`)
   orden.value = data
-  nombreOperario.value = data.nombre_operario_picky
+  nombreOperario.value = data.nombre_operario_picking
   cargando.value = false
 }
 
@@ -39,11 +39,11 @@ async function registrarRecepcion() {
   guardando.value = true
   try {
     const { data } = await api.patch(
-      `/produccion/ordenes/${route.params.id}/recepcion-picky/`,
-      { nombre_operario_picky: nombreOperario.value },
+      `/produccion/ordenes/${route.params.id}/recepcion-picking/`,
+      { nombre_operario_picking: nombreOperario.value },
     )
     orden.value = data
-    nombreOperario.value = data.nombre_operario_picky
+    nombreOperario.value = data.nombre_operario_picking
     guardadoOk.value = true
   } catch (e) {
     errores.value = mapearErroresCampo(e)
@@ -72,10 +72,10 @@ onMounted(cargarOrden)
 <template>
   <main class="px-4 py-6 sm:px-6 sm:py-8">
     <router-link
-      :to="{ name: 'picky-ordenes' }"
+      :to="{ name: 'picking-ordenes' }"
       class="mb-4 inline-block text-sm font-semibold text-accent-blue hover:underline"
     >
-      ← Volver a Picky
+      ← Volver a Picking
     </router-link>
 
     <p v-if="cargando" class="py-8 text-center text-sm text-ink-500">Cargando orden…</p>
@@ -86,7 +86,7 @@ onMounted(cargarOrden)
         <Badge :color="ESTADO_BADGE[orden.estado]">{{ orden.estado_display }}</Badge>
       </div>
 
-      <!-- Lo que dejó Producción: importante para Picky (urgente / peligroso) -->
+      <!-- Lo que dejó Producción: importante para Picking (urgente / peligroso) -->
       <section class="mb-6 rounded-xl bg-white p-5 shadow-sm">
         <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
           Indicaciones de Producción
@@ -114,13 +114,13 @@ onMounted(cargarOrden)
       </p>
 
       <!-- Sin el detalle evento por evento: el volcado del checklist de Pesaje
-           es material de revisión del Supervisor, no de Picky. -->
+           es material de revisión del Supervisor, no de Picking. -->
       <OrdenTrazabilidad :orden="orden" :mostrar-eventos="false" />
 
       <!-- El formulario solo existe mientras la recepción esté pendiente:
            una vez registrada, el dato ya se ve en Trazabilidad. -->
       <section
-        v-if="!orden.fecha_recepcion_picky"
+        v-if="!orden.fecha_recepcion_picking"
         class="mb-6 rounded-xl bg-white p-5 shadow-sm"
       >
         <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
@@ -130,9 +130,9 @@ onMounted(cargarOrden)
         <form class="space-y-4" @submit.prevent="registrarRecepcion">
           <BaseInput
             v-model="nombreOperario"
-            label="Nombre del operario de Picky"
+            label="Nombre del operario de Picking"
             placeholder="ej. Juan Pérez"
-            :error="errores.nombre_operario_picky"
+            :error="errores.nombre_operario_picking"
             required
           />
           <p class="text-sm text-ink-500">
@@ -152,13 +152,13 @@ onMounted(cargarOrden)
       <OrdenResumen :orden="orden" />
 
       <!-- Liberación a Pesaje: va de última, después de la tabla de materiales,
-           para que Picky revise lo que debe llevar antes de enviar la OP. -->
+           para que Picking revise lo que debe llevar antes de enviar la OP. -->
       <section
-        v-if="orden.estado === 'picky' && orden.fecha_recepcion_picky"
+        v-if="orden.estado === 'picking' && orden.fecha_recepcion_picking"
         class="mb-6 rounded-xl bg-white p-5 shadow-sm"
       >
         <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
-          Finalizar en Picky
+          Finalizar en Picking
         </h2>
         <p class="mb-4 text-sm text-ink-500">
           Revise la lista de materiales antes de enviar. Al enviarla, la orden pasa a Pesaje y

@@ -33,7 +33,7 @@ const ordenesDePesaje = computed(() =>
   esSupervisor.value ? ordenes.value.filter((orden) => orden.fecha_envio_pesaje) : ordenes.value,
 )
 
-// Pendientes = llegó de Picky pero Pesaje aún no confirma el recibido.
+// Pendientes = llegó de Picking pero Pesaje aún no confirma el recibido.
 // En proceso = recibido confirmado y sigue En Pesaje.
 // Pendientes de revisión / Ya liberadas = etapas que solo ve el Supervisor.
 function grupoDe(orden) {
@@ -80,7 +80,7 @@ onMounted(cargarOrdenes)
         {{
           esSupervisor
             ? 'Órdenes de Producción que pasaron por Pesaje.'
-            : 'Órdenes de Producción recibidas de Picky.'
+            : 'Órdenes de Producción recibidas de Picking.'
         }}
       </p>
     </div>
