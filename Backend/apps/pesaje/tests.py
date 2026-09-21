@@ -1,5 +1,4 @@
 from datetime import date
-from decimal import Decimal
 from unittest.mock import patch
 
 from django.urls import reverse
@@ -8,7 +7,7 @@ from rest_framework.test import APITestCase
 from apps.produccion.models import HistorialOrdenProduccion, MaterialOrden, OrdenProduccion
 from apps.usuarios.models import CustomUser
 
-from .models import VERIFICACIONES, VERIFICACIONES_CRITICAS, PesoMaterial, RegistroPesaje
+from .models import VERIFICACIONES, VERIFICACIONES_CRITICAS, RegistroPesaje
 
 
 class FlujoPesajeTests(APITestCase):
@@ -43,7 +42,6 @@ class FlujoPesajeTests(APITestCase):
             'referencia_anterior': 'Referencia anterior',
             'lote_actual': 'L002',
             'nombre_operario': 'Ana Pérez',
-            'pesos': [{'material': self.material.pk, 'peso_real': '10.1250'}],
         }
 
     def datos(self):
@@ -70,7 +68,6 @@ class FlujoPesajeTests(APITestCase):
         respuesta = self.accion('enviar')
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn('lote_actual', respuesta.data)
-        self.assertIn('pesos', respuesta.data)
         self.assertFalse(RegistroPesaje.objects.exists())
         self.assertFalse(HistorialOrdenProduccion.objects.exists())
         self.orden.refresh_from_db()
@@ -91,13 +88,9 @@ class FlujoPesajeTests(APITestCase):
                 self.assertEqual(respuesta.status_code, 400)
                 self.assertIn(campo, respuesta.data)
 
-    def test_guarda_borrador_y_peso_sin_alterar_formula(self):
-        datos = {'lote_actual': 'L002', 'pesos': self.datos()['pesos']}
-        respuesta = self.accion('guardar', datos)
+    def test_guarda_borrador(self):
+        respuesta = self.accion('guardar', {'lote_actual': 'L002'})
         self.assertEqual(respuesta.status_code, 200, respuesta.data)
-        self.material.refresh_from_db()
-        self.assertEqual(self.material.cantidad, 10)
-        self.assertEqual(PesoMaterial.objects.get().peso_real, Decimal('10.1250'))
         registro = RegistroPesaje.objects.get()
         self.assertIsNone(registro.productos_retirados)
         self.assertEqual(registro.registrado_por, self.usuarios['pesaje'])
@@ -115,44 +108,21 @@ class FlujoPesajeTests(APITestCase):
         self.assertEqual(respuesta.data['estado'], 'supervision_pesaje')
         self.assertIsNotNone(respuesta.data['pesaje']['fecha_envio_supervision'])
 
-    def test_pesos_invalidos_y_precision(self):
-        for peso in ['0', '-1', 'NaN', 'Infinity', '1.12345', '10000000000', '']:
-            with self.subTest(peso=peso):
-                datos = self.datos()
-                datos['pesos'][0]['peso_real'] = peso
-                self.assertEqual(self.accion('enviar', datos).status_code, 400)
-        self.assertFalse(PesoMaterial.objects.exists())
-
-    def test_rechaza_material_ajeno_duplicado_y_pendiente(self):
-        otra = OrdenProduccion.objects.create(
-            codigo_producto='P02',
-            referencia='Otra',
-            cantidad=1,
-            codigo_cliente='C',
-            pedido='2',
-            vencimiento_pedido=date(2027, 1, 1),
-            creado_por=self.usuarios['produccion'],
-        )
-        ajeno = MaterialOrden.objects.create(
-            orden=otra, codigo='AJENO', descripcion='Otro', porcentaje=100, cantidad=1
-        )
-        for pesos in [[], [{'material': ajeno.pk, 'peso_real': '1'}], self.datos()['pesos'] * 2]:
-            with self.subTest(pesos=pesos):
-                datos = self.datos()
-                datos['pesos'] = pesos
-                self.assertEqual(self.accion('enviar', datos).status_code, 400)
+    def test_envio_no_pide_pesos_ni_altera_la_formula(self):
+        # El operario solo ve la cantidad de la fórmula; no digita el peso real.
+        datos = {**self.datos(), 'pesos': [{'material': self.material.pk, 'peso_real': '9'}]}
+        respuesta = self.accion('enviar', datos)
+        self.assertEqual(respuesta.status_code, 200, respuesta.data)
+        self.assertEqual(respuesta.data['estado'], 'supervision_pesaje')
+        self.assertNotIn('pesos', respuesta.data['pesaje'])
+        self.material.refresh_from_db()
+        self.assertEqual(self.material.cantidad, 10)
 
     def test_orden_sin_materiales_no_se_envia(self):
         self.material.delete()
-        datos = self.datos()
-        datos['pesos'] = []
-        self.assertEqual(self.accion('enviar', datos).status_code, 400)
-
-    def test_peso_parcial_no_produce_error_interno(self):
-        for peso in [{}, {'material': self.material.pk}, {'peso_real': '1'}]:
-            with self.subTest(peso=peso):
-                self.assertEqual(self.accion('guardar', {'pesos': [peso]}).status_code, 400)
-        self.assertFalse(RegistroPesaje.objects.exists())
+        respuesta = self.accion('enviar', self.datos())
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn('materiales', respuesta.data)
 
     def test_no_edita_en_supervision_ni_repite_envio(self):
         self.enviar()
@@ -222,14 +192,6 @@ class FlujoPesajeTests(APITestCase):
         self.assertEqual(self.accion('aprobar').status_code, 400)
         self.assertEqual(self.accion('devolver', {'motivo': 'x'}).status_code, 400)
 
-    def test_aprobar_revalida_materiales_actuales(self):
-        self.enviar()
-        MaterialOrden.objects.create(
-            orden=self.orden, codigo='M02', descripcion='Nuevo', porcentaje=0, cantidad=1
-        )
-        self.client.force_authenticate(self.usuarios['supervisor'])
-        self.assertEqual(self.accion('aprobar').status_code, 400)
-
     def test_bandeja_de_pesaje_filtrada_y_supervisor_consulta_todo(self):
         listado = reverse('ordenes-list')
         detalle = reverse('ordenes-detail', kwargs={'pk': self.orden.pk})
@@ -258,7 +220,6 @@ class FlujoPesajeTests(APITestCase):
         ):
             self.accion('enviar', self.datos())
         self.assertFalse(RegistroPesaje.objects.exists())
-        self.assertFalse(PesoMaterial.objects.exists())
         self.orden.refresh_from_db()
         self.assertEqual(self.orden.estado, 'pesaje')
 

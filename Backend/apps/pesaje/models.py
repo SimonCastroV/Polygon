@@ -134,20 +134,3 @@ class RegistroPesaje(models.Model):
 
     def __str__(self):
         return f'Pesaje · {self.orden.numero_orden}'
-
-
-class PesoMaterial(models.Model):
-    """Peso real en la misma unidad que la cantidad de fórmula; no altera MaterialOrden."""
-
-    pesaje = models.ForeignKey(RegistroPesaje, on_delete=models.CASCADE, related_name='pesos')
-    material = models.ForeignKey('produccion.MaterialOrden', on_delete=models.PROTECT)
-    peso_real = models.DecimalField(max_digits=14, decimal_places=4)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=['pesaje', 'material'], name='peso_material_unico'),
-            models.CheckConstraint(condition=models.Q(peso_real__gt=0), name='peso_real_positivo'),
-        ]
-
-    def __str__(self):
-        return f'{self.material.codigo} · {self.peso_real}'

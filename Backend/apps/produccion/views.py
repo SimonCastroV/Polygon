@@ -45,7 +45,7 @@ def ordenes_visibles_para(usuario):
         OrdenProduccion.objects.select_related(
             'creado_por', 'recibida_por_picking', 'pesaje__registrado_por', 'pesaje__supervisor'
         )
-        .prefetch_related('materiales', 'pesaje__pesos', 'historial__modificado_por')
+        .prefetch_related('materiales', 'historial__modificado_por')
         .all()
     )
 

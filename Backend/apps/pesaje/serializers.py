@@ -1,35 +1,9 @@
-from decimal import Decimal
-
 from rest_framework import serializers
 
-from .models import VERIFICACIONES, VERIFICACIONES_CRITICAS, PesoMaterial, RegistroPesaje
-
-
-class PesoMaterialSerializer(serializers.ModelSerializer):
-    material = serializers.IntegerField(source='material_id', min_value=1)
-    peso_real = serializers.DecimalField(
-        max_digits=14, decimal_places=4, min_value=Decimal('0.0001')
-    )
-
-    class Meta:
-        model = PesoMaterial
-        fields = ['material', 'peso_real']
-        validators = []
-
-    def validate(self, attrs):
-        # PATCH parcial de la OP no hace opcionales los campos de cada peso.
-        errores = {}
-        if 'material_id' not in attrs:
-            errores['material'] = 'Seleccione una materia prima.'
-        if 'peso_real' not in attrs:
-            errores['peso_real'] = 'Registre el peso real.'
-        if errores:
-            raise serializers.ValidationError(errores)
-        return attrs
+from .models import VERIFICACIONES, VERIFICACIONES_CRITICAS, RegistroPesaje
 
 
 class RegistroPesajeSerializer(serializers.ModelSerializer):
-    pesos = PesoMaterialSerializer(many=True, required=False)
     registrado_por_username = serializers.CharField(
         source='registrado_por.username', read_only=True
     )
@@ -51,7 +25,6 @@ class RegistroPesajeSerializer(serializers.ModelSerializer):
             *[campo for campo, _ in VERIFICACIONES_CRITICAS],
             'critico_observaciones',
             'observaciones',
-            'pesos',
             'registrado_por_username',
             'fecha_recepcion',
             'fecha_modificacion',
@@ -93,16 +66,6 @@ class RegistroPesajeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'detail': mensaje})
         for campo in campos_ajenos:
             attrs.pop(campo, None)
-        materiales = set(orden.materiales.values_list('id', flat=True))
-        pesos = attrs.get('pesos')
-        if pesos is not None:
-            ids = [peso['material_id'] for peso in pesos]
-            if len(ids) != len(set(ids)):
-                raise serializers.ValidationError({'pesos': 'Hay materias primas repetidas.'})
-            if not set(ids).issubset(materiales):
-                raise serializers.ValidationError(
-                    {'pesos': 'Todas las materias primas deben pertenecer a esta OP.'}
-                )
 
         if self.context.get('enviar'):
             errores = {}
@@ -135,43 +98,15 @@ class RegistroPesajeSerializer(serializers.ModelSerializer):
                 errores[campo_observaciones] = (
                     'Explique los puntos marcados “No cumple” antes de enviar a supervisor.'
                 )
-            if pesos is None:
-                ids_pesados = (
-                    set(self.instance.pesos.values_list('material_id', flat=True))
-                    if self.instance
-                    else set()
+            # El operario pesa las cantidades de la fórmula (no las digita), pero
+            # una OP sin materias primas no tiene nada que pesar.
+            if not orden.materiales.exists():
+                errores['materiales'] = (
+                    'Esta OP no tiene materias primas cargadas. Avise a administración.'
                 )
-            else:
-                ids_pesados = {peso['material_id'] for peso in pesos}
-            if not materiales or ids_pesados != materiales:
-                errores['pesos'] = 'Registre un peso positivo para cada materia prima de la OP.'
             if errores:
                 raise serializers.ValidationError(errores)
         return attrs
-
-    def create(self, validated_data):
-        pesos = validated_data.pop('pesos', [])
-        registro = RegistroPesaje.objects.create(**validated_data)
-        self.guardar_pesos(registro, pesos)
-        return registro
-
-    def update(self, instance, validated_data):
-        pesos = validated_data.pop('pesos', None)
-        instance = super().update(instance, validated_data)
-        if pesos is not None:
-            self.guardar_pesos(instance, pesos)
-        return instance
-
-    @staticmethod
-    def guardar_pesos(registro, pesos):
-        # La lista enviada reemplaza el borrador de pesos, nunca la fórmula.
-        registro.pesos.exclude(material_id__in=[p['material_id'] for p in pesos]).delete()
-        for peso in pesos:
-            PesoMaterial.objects.update_or_create(
-                pesaje=registro,
-                material_id=peso['material_id'],
-                defaults={'peso_real': peso['peso_real']},
-            )
 
 
 class DevolucionPesajeSerializer(serializers.Serializer):
