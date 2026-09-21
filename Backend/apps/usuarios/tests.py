@@ -55,7 +55,8 @@ class EdicionUsuariosTests(APITestCase):
         self.assertCountEqual(campos, ['rol', 'is_active'])
 
     def test_solo_el_administrador_edita_usuarios(self):
-        for usuario in (self.operario, CustomUser.objects.create_user(username='sup', rol='supervisor')):
+        supervisor = CustomUser.objects.create_user(username='sup', rol='supervisor')
+        for usuario in (self.operario, supervisor):
             self.client.force_authenticate(usuario)
             with self.subTest(rol=usuario.rol):
                 self.assertEqual(self.editar(self.operario, {'rol': 'admin'}).status_code, 403)

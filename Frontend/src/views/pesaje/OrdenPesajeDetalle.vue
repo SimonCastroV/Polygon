@@ -435,7 +435,7 @@ watch(() => route.params.id, cargarOrden, { immediate: true })
             </h2>
             <p class="mb-4 text-sm text-ink-500">
               Grupo de producto:
-              <Badge color="amber">{{ orden.grupo_critico_pesaje_display }}</Badge>
+              <Badge color="red">{{ orden.grupo_critico_pesaje_display }}</Badge>
             </p>
             <fieldset :disabled="!editable || procesando" class="min-w-0 space-y-4">
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">

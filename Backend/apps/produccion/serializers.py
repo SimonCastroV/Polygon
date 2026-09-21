@@ -98,57 +98,24 @@ class OrdenProduccionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class OrdenProduccionIngresarSerializer(serializers.ModelSerializer):
+class OrdenProduccionEnviarPickingSerializer(serializers.ModelSerializer):
     """
-    "Ingresar a OP": únicos datos que Producción diligencia dentro de
-    Polygon. El resto de la OP (encabezado y materiales) es de solo
+    "Mandar orden a Picking": Producción libera la OP y, en la misma acción,
+    guarda lo que diligenció en la hoja: tipo de orden, grupo de producto
+    para Pesaje y observaciones. Son los únicos datos que Producción captura
+    en Polygon; el resto de la OP (encabezado y materiales) es de solo
     lectura porque viene de Sumicolor (ver docstring de OrdenProduccion).
 
-    'grupo_critico_pesaje' clasifica el producto para Pesaje (Blancos,
-    Aditivos/Retardantes u Hojas azules son críticos): decide qué formulario
-    responde Pesaje, así que se congela cuando el formulario ya se envió a
-    supervisión, igual que en el admin (ver OrdenProduccionAdmin).
+    No hay un guardado aparte: lo que se ve en pantalla al enviar es lo que
+    queda en la OP. El nuevo estado y la fecha/hora los define el servidor,
+    y solo procede si la OP sigue En Producción, de modo que no pueda
+    enviarse dos veces ni reclasificarse después de salir de allí (Pesaje
+    responde su formulario según el grupo; ver también OrdenProduccionAdmin).
     """
 
     class Meta:
         model = OrdenProduccion
         fields = ['clasificacion', 'observaciones', 'grupo_critico_pesaje']
-
-    def validate(self, attrs):
-        if self.instance.estado in (
-            OrdenProduccion.Estado.FINALIZADA,
-            OrdenProduccion.Estado.CANCELADA,
-        ):
-            raise serializers.ValidationError(
-                'No se puede ingresar a una Orden de Producción Finalizada o Cancelada.'
-            )
-        grupo = attrs.get('grupo_critico_pesaje', self.instance.grupo_critico_pesaje)
-        pesaje = getattr(self.instance, 'pesaje', None)
-        if (
-            grupo != self.instance.grupo_critico_pesaje
-            and pesaje
-            and pesaje.fecha_envio_supervision
-        ):
-            raise serializers.ValidationError(
-                {
-                    'grupo_critico_pesaje': 'Pesaje ya envió el formulario a supervisión: no se '
-                    'puede reclasificar el producto.'
-                }
-            )
-        return attrs
-
-
-class OrdenProduccionEnviarPickingSerializer(serializers.ModelSerializer):
-    """
-    "Mandar orden a Picking": Producción libera la OP. No recibe datos del
-    cliente — el nuevo estado y la fecha/hora los define el servidor — y
-    solo procede si la OP sigue En Producción, de modo que no pueda
-    enviarse dos veces.
-    """
-
-    class Meta:
-        model = OrdenProduccion
-        fields = []
 
     def validate(self, attrs):
         if self.instance.estado != OrdenProduccion.Estado.PRODUCCION:
@@ -159,9 +126,13 @@ class OrdenProduccionEnviarPickingSerializer(serializers.ModelSerializer):
         return attrs
 
     def update(self, instance, validated_data):
+        for campo, valor in validated_data.items():
+            setattr(instance, campo, valor)
         instance.estado = OrdenProduccion.Estado.PICKING
         instance.fecha_envio_picking = timezone.now()
-        instance.save(update_fields=['estado', 'fecha_envio_picking', 'fecha_modificacion'])
+        instance.save(
+            update_fields=[*validated_data, 'estado', 'fecha_envio_picking', 'fecha_modificacion']
+        )
         return instance
 
 
@@ -184,7 +155,8 @@ class OrdenProduccionRecepcionPickingSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if self.instance.estado != OrdenProduccion.Estado.PICKING:
             raise serializers.ValidationError(
-                'Solo se puede registrar la recepción de una Orden de Producción que esté En Picking.'
+                'Solo se puede registrar la recepción de una Orden de Producción que esté '
+                'En Picking.'
             )
         return attrs
 

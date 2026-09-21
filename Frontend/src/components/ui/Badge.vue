@@ -2,7 +2,7 @@
 defineProps({
   color: {
     type: String,
-    default: 'gray', // navy | blue | gray | amber | red
+    default: 'gray', // navy | blue | gray | amber | red | violet
   },
 })
 
@@ -12,6 +12,7 @@ const colorClasses = {
   gray: 'bg-slate-200 text-ink-900',
   amber: 'bg-warning-bg text-amber-800 border border-warning',
   red: 'bg-danger text-white',
+  violet: 'bg-violet-100 text-violet-800 border border-violet-300',
 }
 </script>
 

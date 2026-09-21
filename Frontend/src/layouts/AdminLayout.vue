@@ -43,7 +43,7 @@ async function cerrarSesion() {
         Usuarios
       </router-link>
       <router-link
-        v-if="['admin', 'supervisor', 'produccion'].includes(auth.rol)"
+        v-if="['admin', 'supervisor', 'produccion', 'ing_produccion'].includes(auth.rol)"
         :to="{ name: 'admin-ordenes-produccion' }"
         class="shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-semibold"
         active-class="border-navy-900 text-navy-900"

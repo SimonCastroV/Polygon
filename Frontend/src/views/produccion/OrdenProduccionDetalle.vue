@@ -12,29 +12,27 @@ import {
   CLASIFICACION_OPCIONES,
   ESTADO_BADGE,
   GRUPO_CRITICO_OPCIONES,
+  mapearErroresCampo,
 } from '../../utils/ordenes'
 
 const route = useRoute()
 const auth = useAuthStore()
-// Solo Producción (rol 'produccion') diligencia clasificación/observaciones
-// y libera la OP a Picking (ver EsProduccion en el backend); Admin/Supervisor
-// las consultan de solo lectura.
+// Solo Producción (rol 'produccion') diligencia la hoja de la OP y la
+// libera a Picking (ver EsProduccion en el backend); Admin, Supervisor e
+// Ing. Producción la consultan de solo lectura.
 const esProduccion = computed(() => auth.rol === 'produccion')
 
 const orden = ref(null)
 const cargando = ref(true)
 
 const formIngreso = ref({ clasificacion: 'normal', observaciones: '', grupo_critico_pesaje: '' })
-const guardando = ref(false)
-const errorGuardar = ref('')
-const guardadoOk = ref(false)
-// La clasificación se congela cuando Pesaje ya envió su formulario a
-// supervisión: cambiarla ahí invalidaría las respuestas ya dadas.
-const grupoBloqueado = computed(() => Boolean(orden.value?.pesaje?.fecha_envio_supervision))
 
 const enviando = ref(false)
 const errorEnvio = ref('')
 
+// La hoja solo se diligencia mientras la OP sigue En Producción: se guarda al
+// mandarla a Picking (no hay un botón Guardar aparte) y después queda de
+// solo lectura, porque Pesaje responde su formulario según el grupo elegido.
 const puedeEnviarAPicking = computed(
   () => esProduccion.value && orden.value?.estado === 'produccion',
 )
@@ -51,37 +49,27 @@ async function cargarOrden() {
   cargando.value = false
 }
 
-async function guardarIngreso() {
-  errorGuardar.value = ''
-  guardadoOk.value = false
-  guardando.value = true
-  try {
-    const { data } = await api.patch(
-      `/produccion/ordenes/${route.params.id}/ingresar/`,
-      formIngreso.value,
-    )
-    orden.value = data
-    guardadoOk.value = true
-  } catch (e) {
-    const datos = e.response?.data || {}
-    const detalle = datos.non_field_errors || datos.grupo_critico_pesaje
-    errorGuardar.value = Array.isArray(detalle) ? detalle[0] : detalle || 'No se pudo guardar.'
-  } finally {
-    guardando.value = false
-  }
-}
-
+// Guarda lo diligenciado y manda la OP a Picking en una sola acción: el
+// backend lo hace en una transacción, así que o queda todo o no queda nada.
 async function mandarAPicking() {
+  if (enviando.value) return
   errorEnvio.value = ''
   enviando.value = true
   try {
-    const { data } = await api.patch(`/produccion/ordenes/${route.params.id}/enviar-picking/`)
+    const { data } = await api.patch(
+      `/produccion/ordenes/${route.params.id}/enviar-picking/`,
+      formIngreso.value,
+    )
     orden.value = data
   } catch (e) {
-    const detalle = e.response?.data?.non_field_errors
-    errorEnvio.value = Array.isArray(detalle)
-      ? detalle[0]
-      : 'No se pudo mandar la orden a Picking.'
+    const errores = mapearErroresCampo(e)
+    errorEnvio.value =
+      errores.non_field_errors ||
+      errores.clasificacion ||
+      errores.grupo_critico_pesaje ||
+      errores.observaciones ||
+      errores.detail ||
+      'No se pudo mandar la orden a Picking. Lo diligenciado no se perdió: intente nuevamente.'
   } finally {
     enviando.value = false
   }
@@ -115,7 +103,7 @@ onMounted(cargarOrden)
       <section class="mb-6 rounded-xl bg-white p-5 shadow-sm">
         <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">Producción</h2>
 
-        <form v-if="esProduccion" class="space-y-4" @submit.prevent="guardarIngreso">
+        <form v-if="puedeEnviarAPicking" class="space-y-4" @submit.prevent>
           <fieldset>
             <legend class="mb-1.5 text-sm font-medium text-ink-900">Tipo de orden</legend>
             <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -146,19 +134,15 @@ onMounted(cargarOrden)
             </span>
             <select
               v-model="formIngreso.grupo_critico_pesaje"
-              :disabled="grupoBloqueado"
-              class="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20 disabled:cursor-not-allowed disabled:bg-surface-alt"
+              class="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20"
             >
               <option v-for="opcion in GRUPO_CRITICO_OPCIONES" :key="opcion.value" :value="opcion.value">
                 {{ opcion.label }}
               </option>
             </select>
             <span class="mt-1 block text-sm text-ink-500">
-              {{
-                grupoBloqueado
-                  ? 'Pesaje ya envió el formulario a supervisión: la clasificación quedó fija.'
-                  : 'Blancos, Aditivos / Retardantes y Hojas azules son productos críticos: Pesaje responderá el formulario de condiciones especiales.'
-              }}
+              Blancos, Aditivos / Retardantes y Producto peligroso son productos críticos: Pesaje
+              responderá el formulario de condiciones especiales.
             </span>
           </label>
 
@@ -172,12 +156,6 @@ onMounted(cargarOrden)
             />
           </label>
 
-          <p v-if="errorGuardar" class="text-sm text-danger">{{ errorGuardar }}</p>
-          <p v-if="guardadoOk" class="text-sm font-medium text-navy-900">Guardado correctamente.</p>
-
-          <BaseButton type="submit" variant="primary" class="w-full sm:w-auto" :loading="guardando">
-            Guardar
-          </BaseButton>
         </form>
 
         <dl v-else class="space-y-3 text-sm">
@@ -214,9 +192,13 @@ onMounted(cargarOrden)
 
         <template v-if="puedeEnviarAPicking">
           <p class="mb-4 text-sm text-ink-500">
-            Al mandarla, la orden pasa a Picking y queda registrada la fecha y hora del envío.
+            Al mandarla se guarda lo diligenciado arriba (tipo de orden, grupo para Pesaje y
+            observaciones), la orden pasa a Picking y queda registrada la fecha y hora del envío.
+            Después ya no se puede modificar.
           </p>
-          <p v-if="errorEnvio" class="mb-3 text-sm text-danger">{{ errorEnvio }}</p>
+          <p v-if="errorEnvio" role="alert" class="mb-3 text-sm font-medium text-danger">
+            {{ errorEnvio }}
+          </p>
           <BaseButton
             variant="primary"
             class="w-full sm:w-auto"

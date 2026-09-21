@@ -3,7 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import api from '../../services/api'
 import { useAuthStore } from '../../store/auth'
 import Badge from '../../components/ui/Badge.vue'
-import { CLASIFICACION_BADGE, ESTADO_BADGE, formatearFechaHora } from '../../utils/ordenes'
+import FranjaHoja from '../../components/produccion/FranjaHoja.vue'
+import { ESTADO_BADGE, HOJA_OP, formatearFechaHora, urgentesPrimero } from '../../utils/ordenes'
 
 const auth = useAuthStore()
 // La supervisión de Pesaje la hace el rol 'supervisor' genérico.
@@ -45,7 +46,7 @@ function grupoDe(orden) {
 }
 
 const ordenesFiltradas = computed(() =>
-  ordenesDePesaje.value.filter((orden) => grupoDe(orden) === filtro.value),
+  urgentesPrimero(ordenesDePesaje.value.filter((orden) => grupoDe(orden) === filtro.value)),
 )
 
 function contar(valorFiltro) {
@@ -119,8 +120,10 @@ onMounted(cargarOrdenes)
       <div
         v-for="orden in ordenesFiltradas"
         :key="orden.id"
-        class="flex flex-col gap-3 rounded-xl bg-white p-5 shadow-sm"
+        class="flex flex-col gap-3 overflow-hidden rounded-xl bg-white p-5 shadow-sm"
+        :class="HOJA_OP[orden.clasificacion]?.contorno"
       >
+        <FranjaHoja :clasificacion="orden.clasificacion" />
         <div class="flex items-start justify-between gap-2">
           <span class="font-semibold text-ink-900">
             {{ orden.numero_orden }}
@@ -179,10 +182,7 @@ onMounted(cargarOrdenes)
           </div>
         </dl>
 
-        <div class="flex flex-wrap gap-2">
-          <Badge :color="CLASIFICACION_BADGE[orden.clasificacion]">
-            {{ orden.clasificacion_display }}
-          </Badge>
+        <div class="flex flex-wrap gap-2 empty:hidden">
           <Badge v-if="orden.es_critico_pesaje" color="red">⚠️ Producto crítico</Badge>
           <Badge v-if="!orden.pesaje && !esSupervisor" color="gray">Pendiente de recibir</Badge>
           <Badge v-if="orden.pesaje?.revision === 'devuelta'" color="red">Devuelta a Pesaje</Badge>

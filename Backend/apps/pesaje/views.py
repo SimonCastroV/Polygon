@@ -65,7 +65,9 @@ def detalle_registro(orden, registro):
         lineas = [f'Producto crítico: {orden.get_grupo_critico_pesaje_display()}']
         lineas.extend(
             f'{label} {respuestas[valor]}'
-            for (campo, label), valor in zip(VERIFICACIONES_CRITICAS, respuestas_criticas)
+            for (campo, label), valor in zip(
+                VERIFICACIONES_CRITICAS, respuestas_criticas, strict=True
+            )
         )
         lineas.append(f'Acciones correctivas / Observaciones: {registro.critico_observaciones}')
         detalle += '\n' + '\n'.join(lineas)

@@ -256,8 +256,8 @@ class FlujoPesajeTests(APITestCase):
         }
 
     def test_no_critico_no_requiere_seccion_aunque_texto_mencione_grupos(self):
-        self.orden.referencia = 'Blancos Aditivos Retardantes a la Llama Hojas azules'
-        self.orden.clasificacion = 'peligroso'
+        self.orden.referencia = 'Blancos Aditivos Retardantes a la Llama Producto peligroso'
+        self.orden.clasificacion = 'acompanamiento_ip'
         self.orden.save()
         respuesta = self.enviar()
         self.assertFalse(respuesta.data['es_critico_pesaje'])
@@ -339,7 +339,7 @@ class FlujoPesajeTests(APITestCase):
         self.assertIn('Cero Pellets en el Piso”. Cumple', evento_actualizado.detalle)
 
     def test_cada_grupo_critico_requiere_todas_las_respuestas(self):
-        for grupo in ['blancos', 'aditivos_retardantes', 'hojas_azules']:
+        for grupo in ['blancos', 'aditivos_retardantes', 'producto_peligroso']:
             self.marcar_critico(grupo)
             respuesta = self.accion('enviar', self.datos_base())
             self.assertEqual(respuesta.status_code, 400)
@@ -362,7 +362,7 @@ class FlujoPesajeTests(APITestCase):
         self.assertEqual(self.orden.estado, 'pesaje')
 
     def test_critico_completo_envia_y_supervisor_ve_no_cumple(self):
-        self.marcar_critico('hojas_azules')
+        self.marcar_critico('producto_peligroso')
         datos = self.datos_criticos()
         datos['critico_cero_pellets'] = False
         respuesta = self.accion('enviar', datos)
@@ -372,7 +372,7 @@ class FlujoPesajeTests(APITestCase):
         respuesta = self.client.get(reverse('ordenes-detail', kwargs={'pk': self.orden.pk}))
         self.assertEqual(respuesta.status_code, 200)
         self.assertTrue(respuesta.data['es_critico_pesaje'])
-        self.assertEqual(respuesta.data['grupo_critico_pesaje_display'], 'Hojas azules')
+        self.assertEqual(respuesta.data['grupo_critico_pesaje_display'], 'Producto peligroso')
         for campo, _ in VERIFICACIONES_CRITICAS:
             self.assertEqual(respuesta.data['pesaje'][campo], datos[campo])
         self.assertEqual(
@@ -444,42 +444,6 @@ class FlujoPesajeTests(APITestCase):
         RegistroPesaje.objects.filter(orden=self.orden).update(critico_cero_pellets=None)
         self.client.force_authenticate(self.usuarios['supervisor'])
         self.assertEqual(self.accion('aprobar').status_code, 400)
-
-    def ingresar(self, datos):
-        return self.client.patch(
-            reverse('ordenes-ingresar', kwargs={'pk': self.orden.pk}), datos, format='json'
-        )
-
-    def test_produccion_clasifica_el_producto_y_queda_en_el_historial(self):
-        self.marcar_critico('')
-        self.client.force_authenticate(self.usuarios['produccion'])
-        respuesta = self.ingresar({'grupo_critico_pesaje': 'blancos'})
-        self.assertEqual(respuesta.status_code, 200, respuesta.data)
-        self.assertEqual(respuesta.data['grupo_critico_pesaje'], 'blancos')
-        self.assertTrue(respuesta.data['es_critico_pesaje'])
-        evento = HistorialOrdenProduccion.objects.get(campo='grupo_critico_pesaje')
-        self.assertEqual(evento.valor_nuevo, 'blancos')
-        self.assertEqual(evento.modificado_por, self.usuarios['produccion'])
-        self.assertIn('Blancos', evento.detalle)
-
-    def test_solo_produccion_clasifica_el_producto(self):
-        for rol in ['pesaje', 'picking', 'supervisor', 'admin']:
-            self.client.force_authenticate(self.usuarios[rol])
-            with self.subTest(rol=rol):
-                self.assertEqual(self.ingresar({'grupo_critico_pesaje': 'blancos'}).status_code, 403)
-        self.orden.refresh_from_db()
-        self.assertEqual(self.orden.grupo_critico_pesaje, 'no_critico')
-
-    def test_no_se_reclasifica_despues_de_enviar_a_supervision(self):
-        self.enviar()
-        self.client.force_authenticate(self.usuarios['produccion'])
-        respuesta = self.ingresar({'grupo_critico_pesaje': 'blancos'})
-        self.assertEqual(respuesta.status_code, 400)
-        self.assertIn('grupo_critico_pesaje', respuesta.data)
-        self.orden.refresh_from_db()
-        self.assertEqual(self.orden.grupo_critico_pesaje, 'no_critico')
-        # Las observaciones sí se pueden seguir editando.
-        self.assertEqual(self.ingresar({'observaciones': 'Nota posterior'}).status_code, 200)
 
     def test_admin_congela_grupo_enviado_pero_permite_clasificar_legadas(self):
         from django.contrib.admin.sites import AdminSite
