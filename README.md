@@ -35,7 +35,7 @@ Polygon/
 │       ├── usuarios/      # login, roles, auditoría de usuarios
 │       ├── produccion/    # Orden de Producción, materiales, historial
 │       ├── picking/         # (usa los endpoints de produccion)
-│       ├── pesaje/        # formularios de verificación y pesos reales
+│       ├── pesaje/        # formularios de verificación y hoja de pesaje
 │       └── mezcla/ extrusion/ calidad/ empaque/ reportes/   ← pendientes
 └── Frontend/src/
     ├── views/             # pantallas por módulo (usuarios, produccion, picking, pesaje)
@@ -98,7 +98,8 @@ Del archivo `HOJA DE PROCESO PESAJE Y MEZCLA.xlsx` entregado por Sumicolor:
 | CLIENTE | `Lotes_de_Produccion` | `Cliente` | nvarchar(100), not null |
 
 **Todo lo demás de esa hoja lo aporta Polygon**: verificaciones de limpieza, condiciones críticas,
-pesos reales, horas de inicio/fin, operario y firmas digitales.
+horas de inicio/fin, operario y firmas digitales. Las cantidades a pesar son las de la fórmula:
+el operario las ve, no las digita.
 
 ---
 
@@ -160,15 +161,6 @@ Un registro por OP (`OneToOne`). Contiene:
 Cada verificación admite tres valores: **Cumple**, **No cumple** y *sin responder* (`null`), para
 no confundir "pendiente" con "incumple".
 
-### `pesaje_pesomaterial` — pesos reales
-| Campo | Descripción |
-|---|---|
-| `pesaje` | registro de Pesaje al que pertenece |
-| `material` | materia prima de la fórmula |
-| `peso_real` | decimal (14,4), obligatorio > 0 |
-
-Nunca modifica la cantidad teórica de la fórmula: la conserva para poder comparar.
-
 ### `usuarios_customuser` y `usuarios_registroauditoriausuario`
 Usuarios con **un rol único** por cuenta, y una fila de auditoría por cada cambio de `rol` o
 `is_active` (quién lo cambió y cuándo).
@@ -182,7 +174,7 @@ Usuarios con **un rol único** por cuenta, y una fila de auditoría por cada cam
 | **Administrador** | Gestionar usuarios y roles; cargar OP por el admin de Django |
 | **Producción** | Clasificar la OP (tipo y grupo para Pesaje), observaciones, liberar a Picking |
 | **Picking** | Confirmar recepción, consultar materiales, enviar a Pesaje |
-| **Pesaje** | Confirmar recibido, verificación de limpieza, registrar pesos, enviar a supervisor |
+| **Pesaje** | Confirmar recibido, verificación de limpieza, ver cantidades a pesar, enviar a supervisor |
 | **Supervisor** | Consultar todas las OP; revisar el pesaje: enviar a Mezcla o devolver |
 | Mezcla, Extrusión, Calidad, Empaque, Planta | Roles creados; sus módulos están pendientes |
 
@@ -224,8 +216,9 @@ OP de su cola: Pesaje ve únicamente las que están En Pesaje, Picking las que P
 2. **Verificación de limpieza + despeje de línea**, o bien el **formulario de condiciones críticas**
    si el producto lo es. Nunca se muestran los dos: cada producto responde el suyo.
 3. Un **"No cumple"** no bloquea el avance, pero obliga a explicarlo en observaciones.
-4. **"Empezar pesaje"** abre la hoja de proceso: datos de la OP en solo lectura y el peso real de
-   cada materia prima. El servidor sella la hora de inicio.
+4. **"Empezar pesaje"** abre la hoja de proceso: datos de la OP en solo lectura y, en grande, la
+   cantidad a pesar de cada materia prima según la fórmula (el operario no digita pesos). El
+   servidor sella la hora de inicio.
 5. **"Enviar a supervisor"** — valida, guarda y pasa la OP a revisión. **No salta a Mezcla.**
 
 ### Productos críticos
@@ -236,8 +229,8 @@ formulario se envía a supervisión, la clasificación se congela.
 
 ### Supervisor
 - Bandeja con filtros (Pendientes de revisión · En Pesaje · Ya liberadas).
-- Revisa el pesaje registrado: verificaciones, observaciones, pesos reales y **la diferencia frente
-  a la fórmula**.
+- Revisa el pesaje registrado: verificaciones, observaciones, horas de inicio/fin y las
+  cantidades de la fórmula.
 - **Enviar a Mezcla** (libera la OP) o **Devolver a Pesaje** con motivo obligatorio. La OP vuelve a
   la bandeja del operario, que corrige y reenvía.
 

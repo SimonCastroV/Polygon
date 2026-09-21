@@ -1,7 +1,7 @@
 <script setup>
-// Hoja de proceso de Pesaje: los datos del encabezado llegan de la OP (solo
-// lectura) y el operario únicamente registra el peso real de cada materia
-// prima. Las horas las sella el servidor. La trazabilidad se consulta en el
+// Hoja de proceso de Pesaje: todo llega de la OP (solo lectura). El operario
+// ve cuánto pesar de cada materia prima según la fórmula; no digita el peso
+// real. Las horas las sella el servidor. La trazabilidad se consulta en el
 // detalle de la OP, no se repite aquí.
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -18,11 +18,9 @@ const cargando = ref(true)
 const errorCarga = ref('')
 const enviando = ref(false)
 const mensajeBloqueo = ref('')
-const pesos = ref([])
 
 const registro = computed(() => orden.value?.pesaje || null)
 const esCritico = computed(() => orden.value?.es_critico_pesaje === true)
-const enPesaje = computed(() => orden.value?.estado === 'pesaje')
 
 // Solo presentación: conserva los decimales significativos, sin redondear.
 function formatearCantidad(valor) {
@@ -31,22 +29,12 @@ function formatearCantidad(valor) {
 
 const unidad = computed(() => orden.value?.unidad?.trim() || '')
 
-function mostrarOrden(data) {
-  orden.value = data
-  pesos.value = data.materiales.map((material) => ({
-    material: material.id,
-    peso_real: formatearCantidad(
-      data.pesaje?.pesos?.find((peso) => peso.material === material.id)?.peso_real ?? '',
-    ),
-  }))
-}
-
 async function cargarOrden() {
   cargando.value = true
   errorCarga.value = ''
   try {
     const { data } = await api.get(`/produccion/ordenes/${route.params.id}/`)
-    mostrarOrden(data)
+    orden.value = data
     if (!data.pesaje) {
       errorCarga.value = 'Primero confirme el recibido de la OP en el detalle de Pesaje.'
       return
@@ -57,7 +45,7 @@ async function cargarOrden() {
     }
     // Sella la hora de inicio del pesaje (H.INC de la hoja de proceso).
     const respuesta = await api.patch(`/produccion/ordenes/${route.params.id}/pesaje/iniciar/`)
-    mostrarOrden(respuesta.data)
+    orden.value = respuesta.data
   } catch {
     errorCarga.value = 'No se pudo abrir el pesaje. Vuelva al detalle de la OP.'
   } finally {
@@ -65,33 +53,21 @@ async function cargarOrden() {
   }
 }
 
-function pesoValido(valor) {
-  const texto = String(valor || '').trim()
-  return texto !== '' && Number.isFinite(Number(texto)) && Number(texto) > 0
-}
-
 async function enviarASupervisor() {
   if (enviando.value) return
   mensajeBloqueo.value = ''
-  const faltantes = orden.value.materiales.filter((_, i) => !pesoValido(pesos.value[i].peso_real))
   if (!orden.value.materiales.length) {
     mensajeBloqueo.value = 'Esta OP no tiene materias primas cargadas. Avise a administración.'
     return
   }
-  if (faltantes.length) {
-    mensajeBloqueo.value = `Falta registrar el peso de ${faltantes.length} materia(s) prima(s). Todos los pesos deben ser mayores que cero.`
-    return
-  }
   enviando.value = true
   try {
-    await api.patch(`/produccion/ordenes/${route.params.id}/pesaje/enviar-supervisor/`, {
-      pesos: pesos.value.map((peso) => ({ material: peso.material, peso_real: peso.peso_real })),
-    })
+    await api.patch(`/produccion/ordenes/${route.params.id}/pesaje/enviar-supervisor/`)
     router.push({ name: 'pesaje-ordenes' })
   } catch (e) {
     const errores = mapearErroresCampo(e)
     mensajeBloqueo.value =
-      errores.pesos ||
+      errores.materiales ||
       errores.detail ||
       errores.non_field_errors ||
       'No se pudo enviar a supervisor. Revise la verificación en el detalle de la OP.'
@@ -159,14 +135,13 @@ onMounted(cargarOrden)
         </dl>
       </section>
 
-      <!-- Único dato que registra el operario en esta pantalla. -->
+      <!-- Lo que el operario debe pesar: la cantidad de la fórmula de cada
+           materia prima, en grande para leerla de un vistazo desde la balanza. -->
       <section class="mb-6 rounded-xl bg-white p-5 shadow-sm">
         <h2 class="mb-1 text-sm font-semibold uppercase tracking-wide text-ink-500">
           Pesaje de materias primas
         </h2>
-        <p class="mb-4 text-sm text-ink-500">
-          Registre el peso real de cada materia prima. La cantidad de la fórmula no se modifica.
-        </p>
+        <p class="mb-4 text-sm text-ink-500">Pese la cantidad indicada para cada materia prima.</p>
 
         <p v-if="!orden.materiales.length" class="py-6 text-center text-sm text-ink-500">
           Esta orden no tiene materias primas registradas.
@@ -174,35 +149,24 @@ onMounted(cargarOrden)
 
         <ul v-else class="space-y-3">
           <li
-            v-for="(material, index) in orden.materiales"
+            v-for="material in orden.materiales"
             :key="material.id"
             class="rounded-lg border border-slate-200 p-4"
           >
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="min-w-0">
                 <p class="text-base font-semibold text-ink-900">{{ material.descripcion }}</p>
-                <p class="mt-0.5 text-sm text-ink-500">
-                  {{ material.codigo }} · Fórmula:
-                  <span class="font-medium text-ink-900 tabular-nums">
-                    {{ formatearCantidad(material.cantidad) }} {{ unidad }}
-                  </span>
+                <p class="mt-0.5 text-sm text-ink-500">{{ material.codigo }}</p>
+              </div>
+              <div class="sm:text-right">
+                <p class="text-sm font-medium text-ink-500">Cantidad a pesar</p>
+                <p class="text-3xl font-bold text-navy-900 tabular-nums sm:text-4xl">
+                  {{ formatearCantidad(material.cantidad) }}
+                  <span v-if="unidad" class="text-xl font-semibold text-ink-500 sm:text-2xl">{{
+                    unidad
+                  }}</span>
                 </p>
               </div>
-              <label class="block sm:w-56">
-                <span class="mb-1.5 block text-sm font-medium text-ink-900">Peso real</span>
-                <div class="flex items-center gap-2">
-                  <input
-                    v-model="pesos[index].peso_real"
-                    type="number"
-                    inputmode="decimal"
-                    min="0.0001"
-                    step="0.0001"
-                    :disabled="enviando || !enPesaje"
-                    class="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-base text-ink-900 tabular-nums outline-none focus:border-navy-900 focus:ring-2 focus:ring-navy-900/20"
-                  />
-                  <span v-if="unidad" class="shrink-0 text-sm text-ink-500">{{ unidad }}</span>
-                </div>
-              </label>
             </div>
           </li>
         </ul>

@@ -23,17 +23,16 @@ Todas las acciones nuevas son PATCH bajo `/api/produccion/ordenes/{id}/pesaje/`:
 | `aprobar/` | Aprobar y enviar a Mezcla | supervisor_pesaje |
 | `devolver/` | Devolver con `{ "motivo": "..." }` obligatorio | supervisor_pesaje |
 
-Guardar/enviar aceptan `lote_anterior`, `referencia_anterior`, `lote_actual`, `nombre_operario`, `observaciones`, los diez booleanos definidos en `apps/pesaje/models.py::VERIFICACIONES` y `pesos: [{ "material": 123, "peso_real": "10.1250" }]`.
+Guardar/enviar aceptan `lote_anterior`, `referencia_anterior`, `lote_actual`, `nombre_operario`, `observaciones`, los diez booleanos definidos en `apps/pesaje/models.py::VERIFICACIONES` (o los de `VERIFICACIONES_CRITICAS` y `critico_observaciones` si el producto es crítico). El operario no digita pesos: la hoja de pesaje solo muestra la cantidad de la fórmula de cada materia prima.
 
-PATCH puede omitir campos ya guardados. Si incluye `pesos`, la lista reemplaza los pesos del borrador. Cada elemento exige material y peso. La referencia actual, usuarios, fechas, revisión y cambios de estado los define el servidor. La respuesta es la OP completa actualizada.
+PATCH puede omitir campos ya guardados. La referencia actual, usuarios, fechas, revisión y cambios de estado los define el servidor. La respuesta es la OP completa actualizada.
 
 ## Persistencia y reglas
 
 - `RegistroPesaje`: OneToOne con OP; formulario, cuenta del último registro, recepción/primer guardado, envío y última revisión.
-- `PesoMaterial`: FK a registro y material; Decimal(14,4), positivo y único por registro/material. No modifica `MaterialOrden.cantidad` ni el porcentaje original.
 - Se extiende `HistorialOrdenProduccion` con `detalle` de texto, para conservar motivos completos y los ciclos anteriores aunque el formulario vuelva a editarse.
 - Cada operación de escritura bloquea la OP con `select_for_update` y guarda formulario, transición e historial en una sola transacción.
-- Un borrador admite campos y respuestas pendientes (null). Para enviar se exigen lote/referencia anterior, lote actual, nombre del operario, diez respuestas y un peso positivo por cada material de la OP. No se permiten materiales ajenos, duplicados, pesos no finitos o más de cuatro decimales.
+- Un borrador admite campos y respuestas pendientes (null). Para enviar se exigen lote/referencia anterior, lote actual, nombre del operario, y las diez respuestas del formulario que aplique.
 - Una OP sin materiales no puede enviarse. Aprobar vuelve a comprobar la integridad del registro.
 - Después de enviar, Pesaje pierde edición y la OP sale de su bandeja; una devolución conserva los datos y habilita su corrección. Una OP aprobada sale de la bandeja del supervisor.
 - La entrada a Pesaje se registra desde Picking; la recepción propia corresponde al primer guardado del formulario. Abrir una OP no genera una recepción.

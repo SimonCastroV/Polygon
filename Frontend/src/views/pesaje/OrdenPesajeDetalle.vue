@@ -66,31 +66,13 @@ const CAMPOS = [
 // Motivo por el que "Empezar pesaje" no avanzó, en lenguaje del operario.
 const mensajeBloqueo = ref('')
 
-// Pesos que registró el operario en la hoja de proceso (solo los revisa el
-// Supervisor; el operario los captura en PesajeCantidades.vue).
+// Registro del operario en la hoja de proceso (solo lo revisa el Supervisor).
+// Las cantidades son las de la fórmula: el operario las pesa, no las digita.
 const registroPesaje = computed(() => orden.value?.pesaje || null)
 const unidadVisible = computed(() => orden.value?.unidad?.trim() || '')
 
 function formatearCantidad(valor) {
   return String(valor ?? '').replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1')
-}
-
-function pesoDe(material) {
-  return registroPesaje.value?.pesos?.find((peso) => peso.material === material.id)?.peso_real
-}
-
-function pesoRealDe(material) {
-  const peso = pesoDe(material)
-  return peso ? `${formatearCantidad(peso)} ${unidadVisible.value}`.trim() : 'Pendiente'
-}
-
-function diferenciaDe(material) {
-  const peso = pesoDe(material)
-  if (!peso) return ''
-  const diferencia = Number((Number(peso) - Number(material.cantidad)).toFixed(4))
-  if (!Number.isFinite(diferencia) || diferencia === 0) return ''
-  const signo = diferencia > 0 ? '+' : ''
-  return `${signo}${formatearCantidad(diferencia.toFixed(4))} ${unidadVisible.value}`.trim()
 }
 
 // El botón nunca se deshabilita: al pulsarlo se marca en rojo lo que falte y
@@ -294,8 +276,8 @@ watch(() => route.params.id, cargarOrden, { immediate: true })
           Este producto (<span class="font-semibold">{{
             orden.grupo_critico_pesaje_display
           }}</span
-          >) tiene condiciones especiales de Pesaje. Además de la verificación estándar, complete
-          la verificación de condiciones críticas antes de continuar.
+          >) tiene condiciones especiales de Pesaje. Complete la verificación de condiciones
+          críticas antes de continuar.
         </p>
       </section>
 
@@ -526,8 +508,8 @@ watch(() => route.params.id, cargarOrden, { immediate: true })
               Pesaje de materias primas
             </h2>
             <p class="mb-4 text-sm text-ink-500">
-              Al continuar se guarda la verificación y se abre el registro de cantidades pesadas
-              por materia prima.
+              Al continuar se guarda la verificación y se abren las cantidades a pesar de cada
+              materia prima.
             </p>
             <p v-if="mensajeBloqueo" role="alert" class="mb-4 text-sm font-medium text-danger">
               {{ mensajeBloqueo }}
@@ -569,33 +551,25 @@ watch(() => route.params.id, cargarOrden, { immediate: true })
           </div>
         </dl>
         <div class="overflow-x-auto rounded-lg border border-slate-100">
-          <table class="w-full min-w-[520px] text-left text-sm">
+          <table class="w-full min-w-[400px] text-left text-sm">
             <thead class="bg-surface-alt text-xs font-semibold uppercase text-ink-500">
               <tr>
                 <th class="px-4 py-2">Código</th>
                 <th class="px-4 py-2">Descripción</th>
-                <th class="px-4 py-2">Fórmula</th>
-                <th class="px-4 py-2">Peso real</th>
-                <th class="px-4 py-2">Diferencia</th>
+                <th class="px-4 py-2">Cantidad</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
               <tr v-if="!orden.materiales.length">
-                <td colspan="5" class="px-4 py-6 text-center text-ink-500">
+                <td colspan="3" class="px-4 py-6 text-center text-ink-500">
                   Esta orden no tiene materias primas registradas.
                 </td>
               </tr>
               <tr v-for="material in orden.materiales" :key="material.id">
                 <td class="px-4 py-2 text-ink-900">{{ material.codigo }}</td>
                 <td class="px-4 py-2 text-ink-900">{{ material.descripcion }}</td>
-                <td class="px-4 py-2 text-ink-500 tabular-nums">
-                  {{ formatearCantidad(material.cantidad) }} {{ unidadVisible }}
-                </td>
                 <td class="px-4 py-2 font-medium text-ink-900 tabular-nums">
-                  {{ pesoRealDe(material) }}
-                </td>
-                <td class="px-4 py-2 tabular-nums" :class="diferenciaDe(material) ? 'text-danger' : 'text-ink-500'">
-                  {{ diferenciaDe(material) || '—' }}
+                  {{ formatearCantidad(material.cantidad) }} {{ unidadVisible }}
                 </td>
               </tr>
             </tbody>
