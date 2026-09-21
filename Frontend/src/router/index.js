@@ -21,7 +21,7 @@ const routes = [
     // área). El backend aplica también permisos y filtros por estado.
     meta: {
       requiresAuth: true,
-      rolesPermitidos: ['admin', 'supervisor', 'produccion', 'picking', 'pesaje'],
+      rolesPermitidos: ['admin', 'supervisor', 'produccion', 'ing_produccion', 'picking', 'pesaje'],
     },
     children: [
       {
@@ -53,13 +53,15 @@ const routes = [
         path: 'produccion/ordenes',
         name: 'admin-ordenes-produccion',
         component: () => import('../views/produccion/OrdenesProduccion.vue'),
-        meta: { rolesPermitidos: ['admin', 'supervisor', 'produccion'] },
+        // Ing. Producción la consulta de solo lectura; el backend le limita las
+        // OP a las de acompañamiento de IP (hoja azul).
+        meta: { rolesPermitidos: ['admin', 'supervisor', 'produccion', 'ing_produccion'] },
       },
       {
         path: 'produccion/ordenes/:id',
         name: 'admin-orden-detalle',
         component: () => import('../views/produccion/OrdenProduccionDetalle.vue'),
-        meta: { rolesPermitidos: ['admin', 'supervisor', 'produccion'] },
+        meta: { rolesPermitidos: ['admin', 'supervisor', 'produccion', 'ing_produccion'] },
       },
       {
         path: 'picking/ordenes',
@@ -113,7 +115,9 @@ const router = createRouter({
 
 export function destinoSegunRol(rol) {
   if (rol === 'admin') return { name: 'admin-usuarios' }
-  if (rol === 'supervisor' || rol === 'produccion') return { name: 'admin-ordenes-produccion' }
+  if (['supervisor', 'produccion', 'ing_produccion'].includes(rol)) {
+    return { name: 'admin-ordenes-produccion' }
+  }
   if (rol === 'picking') return { name: 'picking-ordenes' }
   if (rol === 'pesaje') return { name: 'pesaje-ordenes' }
 

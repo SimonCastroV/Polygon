@@ -11,9 +11,9 @@ class OrdenProduccion(models.Model):
     materias primas (tabla MaterialOrden: código, descripción, %, cantidad)
     provienen de tablas ya existentes de Sumicolor (vista CantidadesLotes,
     FrmProductos, Productos, MateriasPrimas, LotesProduccion). Ese
-    diccionario NO tiene ningún campo de observaciones ni de clasificación
-    urgente/peligroso/normal: esos dos sí son datos propios que captura
-    Producción en Polygon (ver OrdenProduccionIngresarSerializer).
+    diccionario NO tiene ningún campo de observaciones ni de clase de OP
+    (hoja blanca/amarilla/azul): esos dos sí son datos propios que captura
+    Producción en Polygon (ver OrdenProduccionEnviarPickingSerializer).
 
     Regla de negocio: la OP no se crea/edita desde Polygon — llega ya hecha
     de Sumicolor. Mientras no exista esa integración, el encabezado y los
@@ -29,16 +29,18 @@ class OrdenProduccion(models.Model):
     """
 
     class Clasificacion(models.TextChoices):
-        URGENTE = 'urgente', 'Urgente'
-        PELIGROSO = 'peligroso', 'Producto peligroso'
-        NORMAL = 'normal', 'Proceso normal'
+        """Clase de OP, según el color de la hoja física."""
+
+        URGENTE = 'urgente', 'Urgente'  # Hoja amarilla
+        ACOMPANAMIENTO_IP = 'acompanamiento_ip', 'Acompañamiento de IP'  # Hoja azul
+        NORMAL = 'normal', 'Proceso normal'  # Hoja blanca
 
     class GrupoCriticoPesaje(models.TextChoices):
         SIN_CLASIFICAR = '', 'Sin clasificar'
         NO_CRITICO = 'no_critico', 'No crítico'
         BLANCOS = 'blancos', 'Blancos'
         ADITIVOS_RETARDANTES = 'aditivos_retardantes', 'Aditivos / Retardantes a la Llama'
-        HOJAS_AZULES = 'hojas_azules', 'Hojas azules'
+        PRODUCTO_PELIGROSO = 'producto_peligroso', 'Producto peligroso'
 
     class Estado(models.TextChoices):
         """
@@ -84,7 +86,7 @@ class OrdenProduccion(models.Model):
     vencimiento_pedido = models.DateField()
     fecha_hora_lote = models.DateTimeField(null=True, blank=True)
 
-    # --- Propios de Polygon (los diligencia Producción al "ingresar a la OP") ---
+    # --- Propios de Polygon (los diligencia Producción al mandar la OP a Picking) ---
     clasificacion = models.CharField(
         max_length=20, choices=Clasificacion.choices, default=Clasificacion.NORMAL
     )
@@ -147,7 +149,7 @@ class OrdenProduccion(models.Model):
         return self.grupo_critico_pesaje in (
             self.GrupoCriticoPesaje.BLANCOS,
             self.GrupoCriticoPesaje.ADITIVOS_RETARDANTES,
-            self.GrupoCriticoPesaje.HOJAS_AZULES,
+            self.GrupoCriticoPesaje.PRODUCTO_PELIGROSO,
         )
 
     @staticmethod

@@ -4,7 +4,8 @@
 import { computed, onMounted, ref } from 'vue'
 import api from '../../services/api'
 import Badge from '../../components/ui/Badge.vue'
-import { CLASIFICACION_BADGE, ESTADO_BADGE, formatearFechaHora } from '../../utils/ordenes'
+import FranjaHoja from '../../components/produccion/FranjaHoja.vue'
+import { ESTADO_BADGE, HOJA_OP, formatearFechaHora, urgentesPrimero } from '../../utils/ordenes'
 
 const FILTROS = [
   { value: 'pendientes', label: 'Pendientes' },
@@ -26,7 +27,7 @@ function grupoDe(orden) {
 }
 
 const ordenesFiltradas = computed(() =>
-  ordenes.value.filter((orden) => grupoDe(orden) === filtro.value),
+  urgentesPrimero(ordenes.value.filter((orden) => grupoDe(orden) === filtro.value)),
 )
 
 function contar(valorFiltro) {
@@ -76,8 +77,10 @@ onMounted(cargarOrdenes)
       <div
         v-for="orden in ordenesFiltradas"
         :key="orden.id"
-        class="flex flex-col gap-3 rounded-xl bg-white p-5 shadow-sm"
+        class="flex flex-col gap-3 overflow-hidden rounded-xl bg-white p-5 shadow-sm"
+        :class="HOJA_OP[orden.clasificacion]?.contorno"
       >
+        <FranjaHoja :clasificacion="orden.clasificacion" />
         <div class="flex items-start justify-between gap-2">
           <span class="font-semibold text-ink-900">{{ orden.numero_orden }}</span>
           <Badge :color="ESTADO_BADGE[orden.estado]">{{ orden.estado_display }}</Badge>
@@ -108,10 +111,7 @@ onMounted(cargarOrdenes)
           </div>
         </dl>
 
-        <div class="flex flex-wrap gap-2">
-          <Badge :color="CLASIFICACION_BADGE[orden.clasificacion]">
-            {{ orden.clasificacion_display }}
-          </Badge>
+        <div class="flex flex-wrap gap-2 empty:hidden">
           <Badge v-if="!orden.fecha_recepcion_picking" color="gray">Pendiente de recibir</Badge>
         </div>
 

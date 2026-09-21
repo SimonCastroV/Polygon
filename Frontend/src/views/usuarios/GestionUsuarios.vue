@@ -11,6 +11,7 @@ const ROL_BADGE = {
   admin: 'navy',
   supervisor: 'blue',
   produccion: 'amber',
+  ing_produccion: 'blue',
   picking: 'gray',
   pesaje: 'gray',
   mezcla: 'gray',
@@ -247,6 +248,7 @@ onMounted(cargarUsuarios)
             <option value="admin">Administrador</option>
             <option value="supervisor">Supervisor</option>
             <option value="produccion">Producción</option>
+            <option value="ing_produccion">Ing. Producción</option>
             <option value="picking">Picking</option>
             <option value="pesaje">Pesaje</option>
             <option value="mezcla">Mezcla</option>
@@ -336,6 +338,7 @@ onMounted(cargarUsuarios)
             <option value="admin">Administrador</option>
             <option value="supervisor">Supervisor</option>
             <option value="produccion">Producción</option>
+            <option value="ing_produccion">Ing. Producción</option>
             <option value="picking">Picking</option>
             <option value="pesaje">Pesaje</option>
             <option value="mezcla">Mezcla</option>

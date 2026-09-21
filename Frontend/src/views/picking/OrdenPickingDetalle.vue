@@ -86,7 +86,7 @@ onMounted(cargarOrden)
         <Badge :color="ESTADO_BADGE[orden.estado]">{{ orden.estado_display }}</Badge>
       </div>
 
-      <!-- Lo que dejó Producción: importante para Picking (urgente / peligroso) -->
+      <!-- Lo que dejó Producción: importante para Picking (urgente / acompañamiento de IP) -->
       <section class="mb-6 rounded-xl bg-white p-5 shadow-sm">
         <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
           Indicaciones de Producción

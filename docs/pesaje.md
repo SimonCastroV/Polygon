@@ -56,7 +56,7 @@ Las pruebas cubren integridad, permisos, bandejas, fórmula preservada, revisió
 
 ## Productos críticos: liberación de condiciones operacionales
 
-La fuente disponible identifica el producto mediante `OrdenProduccion.codigo_producto`, pero no existe un catálogo local ni integración con la familia del producto en Sumicolor. `clasificacion` (normal/urgente/peligroso) tiene otro significado; referencia y descripción no son una clasificación fiable.
+La fuente disponible identifica el producto mediante `OrdenProduccion.codigo_producto`, pero no existe un catálogo local ni integración con la familia del producto en Sumicolor. `clasificacion` (clase de OP: normal/urgente/acompañamiento de IP, es decir hoja blanca/amarilla/azul) tiene otro significado; referencia y descripción no son una clasificación fiable.
 
 Se incorpora `OrdenProduccion.grupo_critico_pesaje`, dato estructurado cargado junto al encabezado en Django admin, usando el código y la ficha técnica como referencia humana:
 
@@ -64,7 +64,7 @@ Se incorpora `OrdenProduccion.grupo_critico_pesaje`, dato estructurado cargado j
 - `no_critico`: No crítico.
 - `blancos`: Blancos.
 - `aditivos_retardantes`: Aditivos / Retardantes a la Llama.
-- `hojas_azules`: Hojas azules.
+- `producto_peligroso`: Producto peligroso (antes ocupaba este lugar `hojas_azules`; la hoja azul es la clase de OP, no un grupo de producto).
 
 No se asignan grupos por búsqueda de palabras ni se inventa un mapeo de códigos. La clasificación es por OP: un futuro importador debe rellenarla desde el catálogo estructurado por código. Hasta entonces, debe clasificarse explícitamente cada OP desde Django admin. La API de Pesaje no acepta modificar el grupo. Se registra el cambio de grupo en `HistorialOrdenProduccion`; una clasificación ya enviada queda de solo lectura en admin para no ocultar información revisada. Las OP legadas enviadas antes de esta migración y aún sin clasificar pueden recibir su clasificación inicial.
 

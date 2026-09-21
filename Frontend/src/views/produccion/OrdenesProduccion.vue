@@ -3,17 +3,20 @@ import { computed, onMounted, ref } from 'vue'
 import api from '../../services/api'
 import { useAuthStore } from '../../store/auth'
 import Badge from '../../components/ui/Badge.vue'
+import FranjaHoja from '../../components/produccion/FranjaHoja.vue'
 import {
-  CLASIFICACION_BADGE,
   ESTADOS_CERRADOS,
   ESTADO_BADGE,
+  HOJA_OP,
   formatearFechaHora,
+  urgentesPrimero,
 } from '../../utils/ordenes'
 
 const auth = useAuthStore()
 // Producción "ingresa" a la OP para diligenciar clasificación/observaciones
 // y es la única que puede liberarla a Picking (ver EsProduccion en el backend);
-// Admin/Supervisor solo consultan.
+// Admin/Supervisor solo consultan. Ing. Producción también solo consulta, y el
+// backend le entrega únicamente las OP con acompañamiento de IP (hoja azul).
 const esProduccion = computed(() => auth.rol === 'produccion')
 const textoBoton = computed(() => (esProduccion.value ? 'Ingresar a OP' : 'Ver detalle'))
 
@@ -35,12 +38,12 @@ const ordenesActivas = computed(() =>
 
 const ordenesFiltradas = computed(() => {
   if (filtro.value === 'pendientes') {
-    return ordenesActivas.value.filter((orden) => orden.estado === 'produccion')
+    return urgentesPrimero(ordenesActivas.value.filter((orden) => orden.estado === 'produccion'))
   }
   if (filtro.value === 'proceso') {
-    return ordenesActivas.value.filter((orden) => orden.estado !== 'produccion')
+    return urgentesPrimero(ordenesActivas.value.filter((orden) => orden.estado !== 'produccion'))
   }
-  return ordenesActivas.value
+  return urgentesPrimero(ordenesActivas.value)
 })
 
 function contar(valorFiltro) {
@@ -67,7 +70,13 @@ onMounted(cargarOrdenes)
   <main class="px-4 py-6 sm:px-6 sm:py-8">
     <div class="mb-4">
       <h1 class="text-xl font-bold text-ink-900 sm:text-2xl">Órdenes de Producción</h1>
-      <p class="mt-1 text-sm text-ink-500">Órdenes en curso (sin finalizar ni cancelar).</p>
+      <p class="mt-1 text-sm text-ink-500">
+        {{
+          auth.rol === 'ing_produccion'
+            ? 'Órdenes con acompañamiento de IP (hoja azul) en curso, en cualquier etapa.'
+            : 'Órdenes en curso (sin finalizar ni cancelar).'
+        }}
+      </p>
     </div>
 
     <div class="mb-6 flex gap-2 overflow-x-auto pb-1">
@@ -96,8 +105,10 @@ onMounted(cargarOrdenes)
       <div
         v-for="orden in ordenesFiltradas"
         :key="orden.id"
-        class="flex flex-col gap-3 rounded-xl bg-white p-5 shadow-sm"
+        class="flex flex-col gap-3 overflow-hidden rounded-xl bg-white p-5 shadow-sm"
+        :class="HOJA_OP[orden.clasificacion]?.contorno"
       >
+        <FranjaHoja :clasificacion="orden.clasificacion" />
         <div class="flex items-start justify-between gap-2">
           <span class="font-semibold text-ink-900">{{ orden.numero_orden }}</span>
           <Badge :color="ESTADO_BADGE[orden.estado]">{{ orden.estado_display }}</Badge>
@@ -123,12 +134,6 @@ onMounted(cargarOrdenes)
             </dd>
           </div>
         </dl>
-
-        <div>
-          <Badge :color="CLASIFICACION_BADGE[orden.clasificacion]">
-            {{ orden.clasificacion_display }}
-          </Badge>
-        </div>
 
         <!-- La OP se libera a Picking desde su detalle, no desde la card: así el
              operario ve la orden completa antes de mandarla. -->

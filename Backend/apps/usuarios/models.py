@@ -16,6 +16,9 @@ class CustomUser(AbstractUser):
         # y además revisa/libera el pesaje: por ahora no se distingue un
         # supervisor por área (ver apps.pesaje.permissions.EsSupervisorPesaje).
         PRODUCCION = 'produccion', 'Producción'
+        # Ingeniero de Producción: acompaña las OP de hoja azul y consulta
+        # su proceso completo, sin editar (ver ordenes_visibles_para).
+        ING_PRODUCCION = 'ing_produccion', 'Ing. Producción'
         PICKING = 'picking', 'Picking'
         PESAJE = 'pesaje', 'Pesaje'
         MEZCLA = 'mezcla', 'Mezcla'

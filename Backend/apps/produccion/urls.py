@@ -15,11 +15,6 @@ urlpatterns = [
         name='ordenes-detail',
     ),
     path(
-        'ordenes/<int:pk>/ingresar/',
-        views.OrdenProduccionIngresarView.as_view(),
-        name='ordenes-ingresar',
-    ),
-    path(
         'ordenes/<int:pk>/enviar-picking/',
         views.OrdenProduccionEnviarPickingView.as_view(),
         name='ordenes-enviar-picking',

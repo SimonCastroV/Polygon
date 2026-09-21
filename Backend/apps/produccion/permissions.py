@@ -3,10 +3,11 @@ from rest_framework.permissions import BasePermission
 
 class PuedeVerOP(BasePermission):
     """
-    Consulta de Órdenes de Producción: Producción, Picking, Supervisor y
-    Administrador. Picking solo alcanza las OP que Producción ya liberó: ese
-    filtro se aplica en el queryset de las vistas (ver
-    apps.produccion.views), no aquí. Pesaje solo alcanza su propia cola. El
+    Consulta de Órdenes de Producción: Producción, Picking, Pesaje,
+    Ing. Producción, Supervisor y Administrador. Picking solo alcanza las OP
+    que Producción ya liberó: ese filtro se aplica en el queryset de las
+    vistas (ver apps.produccion.views), no aquí. Pesaje solo alcanza su
+    propia cola e Ing. Producción solo las OP con acompañamiento de IP. El
     Supervisor consulta todas y además revisa el pesaje. Los demás roles
     de estación se incorporarán cuando se construya cada base.
     """
@@ -18,18 +19,18 @@ class PuedeVerOP(BasePermission):
             request.user
             and request.user.is_authenticated
             and request.user.rol
-            in ('admin', 'supervisor', 'produccion', 'picking', 'pesaje')
+            in ('admin', 'supervisor', 'produccion', 'ing_produccion', 'picking', 'pesaje')
         )
 
 
 class EsProduccion(BasePermission):
     """
-    Solo Producción (rol 'produccion') diligencia la clasificación y las
-    observaciones de una OP al "ingresar" a ella; Admin/Supervisor las
-    pueden ver (vía PuedeVerOP) pero no las editan.
+    Solo Producción (rol 'produccion') diligencia la hoja de la OP (tipo de
+    orden, grupo para Pesaje y observaciones) y la manda a Picking;
+    Admin/Supervisor la pueden ver (vía PuedeVerOP) pero no la editan.
     """
 
-    message = 'Solo Producción puede diligenciar la clasificación y las observaciones de la OP.'
+    message = 'Solo Producción puede diligenciar la hoja de la OP y mandarla a Picking.'
 
     def has_permission(self, request, view):
         return bool(
@@ -47,4 +48,6 @@ class EsPicking(BasePermission):
     message = 'Solo Picking puede registrar la recepción de la Orden de Producción.'
 
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.rol == 'picking')
+        return bool(
+            request.user and request.user.is_authenticated and request.user.rol == 'picking'
+        )
